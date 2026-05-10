@@ -1,0 +1,103 @@
+<template>
+  <div class="card">
+    <div class="flex items-center justify-between border-b hairline px-6 py-4">
+      <div class="flex items-center gap-2">
+        <Icon name="megaphone" size="md" class="text-gold-500" />
+        <h2 class="text-lg font-semibold text-dust-900 dark:text-white">{{ t('dashboard.announcements') }}</h2>
+      </div>
+      <span
+        v-if="announcements.length > 0"
+        class="rounded-full bg-gold-500/15 px-2 py-0.5 text-xs font-medium text-gold-600 dark:bg-gold-300/15 dark:text-gold-300"
+      >
+        {{ announcements.length }}
+      </span>
+    </div>
+    <div class="p-4">
+      <!-- Loading State -->
+      <div v-if="loading" class="flex items-center justify-center py-8">
+        <LoadingSpinner size="md" />
+      </div>
+
+      <!-- Announcements List -->
+      <div v-else-if="announcements.length > 0" class="space-y-4">
+        <div
+          v-for="announcement in announcements.slice(0, 3)"
+          :key="announcement.id"
+          class="rounded-lg border hairline bg-paper-50 p-4 dark:bg-ink-800"
+        >
+          <div class="mb-2 flex items-center justify-between">
+            <h3 class="font-semibold text-dust-900 dark:text-white">{{ announcement.title }}</h3>
+            <span class="text-xs text-secondary-fg">
+              {{ formatDate(announcement.created_at) }}
+            </span>
+          </div>
+          <div
+            class="prose prose-sm max-w-none text-dust-600 dark:prose-invert dark:text-pearl-100"
+            v-html="announcement.content"
+          ></div>
+        </div>
+      </div>
+
+      <!-- Fallback to home_content if no announcements -->
+      <div v-else-if="hasHomeContent">
+        <!-- Render as iframe if URL -->
+        <iframe
+          v-if="isUrl"
+          :src="homeContent.trim()"
+          class="h-48 w-full rounded-lg border-0"
+          allowfullscreen
+        ></iframe>
+        <!-- Render as HTML/Markdown content -->
+        <div
+          v-else
+          class="prose prose-sm max-w-none dark:prose-invert"
+          v-html="homeContent"
+        ></div>
+      </div>
+
+      <!-- No Announcements -->
+      <div v-else class="py-8 text-center text-sm text-dust-400">
+        {{ t('dashboard.noAnnouncements') }}
+      </div>
+    </div>
+  </div>
+</template>
+
+<script setup lang="ts">
+import { ref, computed, onMounted } from 'vue'
+import { useI18n } from 'vue-i18n'
+import { useAppStore } from '@/stores/app'
+import { announcementsAPI } from '@/api'
+import Icon from '@/components/icons/Icon.vue'
+import LoadingSpinner from '@/components/common/LoadingSpinner.vue'
+import type { UserAnnouncement } from '@/types'
+
+const { t, locale } = useI18n()
+const appStore = useAppStore()
+
+const announcements = ref<UserAnnouncement[]>([])
+const loading = ref(true)
+
+// Fallback to home_content
+const homeContent = computed(() => appStore.cachedPublicSettings?.home_content || '')
+const hasHomeContent = computed(() => !!homeContent.value.trim())
+const isUrl = computed(() => {
+  const content = homeContent.value.trim()
+  return content.startsWith('http://') || content.startsWith('https://')
+})
+
+function formatDate(dateStr: string): string {
+  const date = new Date(dateStr)
+  return date.toLocaleDateString(locale.value, { year: 'numeric', month: '2-digit', day: '2-digit' })
+}
+
+onMounted(async () => {
+  try {
+    announcements.value = await announcementsAPI.list(false)
+  } catch (e) {
+    console.error('Failed to load announcements:', e)
+  } finally {
+    loading.value = false
+  }
+})
+</script>

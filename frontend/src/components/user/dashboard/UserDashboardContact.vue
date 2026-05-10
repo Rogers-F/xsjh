@@ -1,0 +1,74 @@
+<template>
+  <div v-if="contactInfo" class="card">
+    <div class="border-b hairline px-6 py-4">
+      <h2 class="text-lg font-semibold text-dust-900 dark:text-white">{{ t('dashboard.contactUs') }}</h2>
+    </div>
+    <div class="p-4">
+      <div class="space-y-3 text-sm">
+        <!-- Parse contact info lines -->
+        <div
+          v-for="(line, index) in contactLines"
+          :key="index"
+          class="flex items-center gap-3"
+        >
+          <div class="flex h-8 w-8 flex-shrink-0 items-center justify-center rounded-lg bg-paper-100 dark:bg-ink-700">
+            <Icon :name="getContactIcon(line)" size="sm" class="text-secondary-fg" />
+          </div>
+          <div class="min-w-0 flex-1">
+            <p class="text-dust-700 dark:text-pearl-100">{{ line }}</p>
+          </div>
+          <button
+            @click="copyText(line)"
+            class="flex h-7 w-7 items-center justify-center rounded-md text-dust-400 transition-colors hover:bg-paper-100 hover:text-dust-600 dark:hover:bg-white/[0.04] dark:hover:text-pearl-100"
+            :title="t('common.copy')"
+          >
+            <Icon :name="copiedIndex === index ? 'check' : 'copy'" size="xs" />
+          </button>
+        </div>
+      </div>
+    </div>
+  </div>
+</template>
+
+<script setup lang="ts">
+import { ref, computed } from 'vue'
+import { useI18n } from 'vue-i18n'
+import { useAppStore } from '@/stores/app'
+import Icon from '@/components/icons/Icon.vue'
+
+const { t } = useI18n()
+const appStore = useAppStore()
+
+const contactInfo = computed(() => appStore.cachedPublicSettings?.contact_info || appStore.contactInfo || '')
+
+const contactLines = computed(() => {
+  if (!contactInfo.value) return []
+  return contactInfo.value.split('\n').filter(line => line.trim())
+})
+
+const copiedIndex = ref<number | null>(null)
+
+const getContactIcon = (line: string) => {
+  const lowerLine = line.toLowerCase()
+  if (lowerLine.includes('qq') || lowerLine.includes('群')) return 'users' as const
+  if (lowerLine.includes('微信') || lowerLine.includes('wechat')) return 'chat' as const
+  if (lowerLine.includes('邮箱') || lowerLine.includes('email') || lowerLine.includes('@')) return 'mail' as const
+  if (lowerLine.includes('电话') || lowerLine.includes('phone') || lowerLine.includes('tel')) return 'chatBubble' as const
+  if (lowerLine.includes('telegram') || lowerLine.includes('tg')) return 'chatBubble' as const
+  if (lowerLine.includes('discord')) return 'users' as const
+  return 'infoCircle' as const
+}
+
+const copyText = async (text: string) => {
+  const index = contactLines.value.indexOf(text)
+  try {
+    await navigator.clipboard.writeText(text)
+    copiedIndex.value = index
+    setTimeout(() => {
+      copiedIndex.value = null
+    }, 2000)
+  } catch (e) {
+    console.error('Failed to copy:', e)
+  }
+}
+</script>

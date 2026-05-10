@@ -1,0 +1,35 @@
+<template>
+  <div v-if="selectedIds.length > 0" class="mb-4 flex items-center justify-between p-3 bg-accent-50 rounded-lg dark:bg-accent-800/30">
+    <div class="flex flex-wrap items-center gap-2">
+      <span class="text-sm font-medium text-gold-700 dark:text-gold-200">
+        {{ t('admin.accounts.bulkActions.selected', { count: selectedIds.length }) }}
+      </span>
+      <button
+        @click="$emit('select-page')"
+        class="text-xs font-medium text-gold-700 hover:text-gold-700 dark:text-gold-200 dark:hover:text-gold-200"
+      >
+        {{ t('admin.accounts.bulkActions.selectCurrentPage') }}
+      </button>
+      <span class="text-dust-300 dark:text-pearl-400">•</span>
+      <button
+        @click="$emit('clear')"
+        class="text-xs font-medium text-gold-700 hover:text-gold-700 dark:text-gold-200 dark:hover:text-gold-200"
+      >
+        {{ t('admin.accounts.bulkActions.clear') }}
+      </button>
+    </div>
+    <div class="flex gap-2">
+      <button @click="$emit('delete')" class="btn btn-danger btn-sm">{{ t('admin.accounts.bulkActions.delete') }}</button>
+      <button @click="$emit('reset-status')" class="btn btn-secondary btn-sm">{{ t('admin.accounts.bulkActions.resetStatus') }}</button>
+      <button @click="$emit('refresh-token')" class="btn btn-secondary btn-sm">{{ t('admin.accounts.bulkActions.refreshToken') }}</button>
+      <button @click="$emit('toggle-schedulable', true)" class="btn btn-success btn-sm">{{ t('admin.accounts.bulkActions.enableScheduling') }}</button>
+      <button @click="$emit('toggle-schedulable', false)" class="btn btn-warning btn-sm">{{ t('admin.accounts.bulkActions.disableScheduling') }}</button>
+      <button @click="$emit('edit')" class="btn btn-primary btn-sm">{{ t('admin.accounts.bulkActions.edit') }}</button>
+    </div>
+  </div>
+</template>
+
+<script setup lang="ts">
+import { useI18n } from 'vue-i18n'
+defineProps(['selectedIds']); defineEmits(['delete', 'edit', 'clear', 'select-page', 'toggle-schedulable', 'reset-status', 'refresh-token']); const { t } = useI18n()
+</script>
