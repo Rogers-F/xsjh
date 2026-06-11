@@ -11,6 +11,8 @@ on:
   push:
     branches:
       - main
+    tags:
+      - 'v*'
 
 concurrency:
   group: xsjh-ghcr-${{ github.ref }}
@@ -28,16 +30,16 @@ jobs:
 
       - name: Compute lowercase image name and tags
         id: img
-        # Always tag the immutable :<sha> (the deploy server pins this). Additionally
-        # move the convenience/fallback :latest tag only when building from main, so a
-        # manual workflow_dispatch on a non-main ref can't promote a side build to :latest.
+        # Always tag the immutable :<sha> (the deploy server pins THIS). Additionally
+        # move the convenience/fallback :latest tag on main pushes and on v* release
+        # tags, so a manual workflow_dispatch on a side ref can't promote to :latest.
         run: |
           name="ghcr.io/${GITHUB_REPOSITORY,,}"
           echo "name=$name" >> "$GITHUB_OUTPUT"
           {
             echo "tags<<EOF"
             echo "$name:${GITHUB_SHA}"
-            if [ "$GITHUB_REF" = "refs/heads/main" ]; then echo "$name:latest"; fi
+            case "$GITHUB_REF" in refs/heads/main|refs/tags/v*) echo "$name:latest";; esac
             echo "EOF"
           } >> "$GITHUB_OUTPUT"
 
@@ -61,3 +63,42 @@ jobs:
           tags: ${{ steps.img.outputs.tags }}
           cache-from: type=gha
           cache-to: type=gha,mode=max
+
+  # Continuous deploy: after the image is pushed (main push OR a v* release tag),
+  # SSH to the deploy server and roll the fused container to the image built in THIS
+  # run, pinned by commit SHA (not the mutable :latest). Targets the standalone
+  # xsjh-v2 container on :8090 with its own SQLite volume — it does NOT touch the
+  # live sub2api(:8080)/new-api(:3000) containers or their data. SESSION_SECRET is a
+  # fixed repo secret so rolls don't invalidate sessions.
+  deploy:
+    needs: build-and-push
+    runs-on: ubuntu-latest
+    # Serialize deploys to the single server container: a near-simultaneous main
+    # push and v* tag (same commit) must not roll xsjh-v2 concurrently.
+    concurrency:
+      group: xsjh-v2-deploy
+      cancel-in-progress: false
+    if: github.ref == 'refs/heads/main' || startsWith(github.ref, 'refs/tags/v')
+    steps:
+      - name: Deploy fused image to the server (xsjh-v2 on :8090)
+        env:
+          DEPLOY_KEY: ${{ secrets.SSH_DEPLOY_KEY }}
+          SESSION_SECRET: ${{ secrets.XSJH_SESSION_SECRET }}
+        run: |
+          set -euo pipefail
+          test -n "$DEPLOY_KEY" || { echo 'SSH_DEPLOY_KEY secret is empty — aborting before touching the server'; exit 1; }
+          test -n "$SESSION_SECRET" || { echo 'XSJH_SESSION_SECRET secret is empty — aborting'; exit 1; }
+          IMAGE="ghcr.io/${GITHUB_REPOSITORY,,}:${GITHUB_SHA}"
+          mkdir -p ~/.ssh
+          printf '%s\n' "$DEPLOY_KEY" > ~/.ssh/id_ed25519
+          chmod 600 ~/.ssh/id_ed25519
+          ssh-keyscan -H 67.215.255.225 >> ~/.ssh/known_hosts 2>/dev/null || true
+          ssh -i ~/.ssh/id_ed25519 -o StrictHostKeyChecking=accept-new root@67.215.255.225 \
+            "docker pull '$IMAGE' && (docker rm -f xsjh-v2 || true) && docker run -d --name xsjh-v2 -p 8090:3000 -e SESSION_SECRET='$SESSION_SECRET' -e COOKIE_SECURE=false -e TZ=Asia/Shanghai -v /root/xsjh-v2/data:/data --restart unless-stopped '$IMAGE' && docker image prune -f"
+          echo 'Health-checking http://67.215.255.225:8090/api/status ...'
+          for i in $(seq 1 20); do
+            code=$(curl -s -o /dev/null -w '%{http_code}' "http://67.215.255.225:8090/api/status" -m 5 || echo 000)
+            if [ "$code" = "200" ]; then echo "xsjh-v2 healthy (HTTP 200)"; exit 0; fi
+            echo "attempt $i/20: HTTP $code"; sleep 3
+          done
+          echo 'xsjh-v2 did not become healthy in time'; exit 1

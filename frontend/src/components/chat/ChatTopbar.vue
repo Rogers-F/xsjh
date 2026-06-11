@@ -90,7 +90,6 @@
 
 <script setup lang="ts">
 import { computed, onBeforeUnmount, onMounted, ref } from 'vue'
-import { useRouter } from 'vue-router'
 import { useI18n } from 'vue-i18n'
 
 import Icon from '@/components/icons/Icon.vue'
@@ -98,10 +97,10 @@ import Select from '@/components/common/Select.vue'
 import KeyGroupModelPicker from '@/components/playground/KeyGroupModelPicker.vue'
 import { usePlaygroundStore } from '@/stores/playground'
 import { useAppStore } from '@/stores/app'
+import { redirectToConsole } from '@/utils/navigation'
 
 const emit = defineEmits<{ (e: 'toggle-sidebar'): void }>()
 
-const router = useRouter()
 const { t } = useI18n()
 const playground = usePlaygroundStore()
 const appStore = useAppStore()
@@ -120,7 +119,7 @@ const modelLabel = computed(() => {
 })
 
 function goDeveloperCenter() {
-  void router.push('/dashboard')
+  redirectToConsole()
 }
 
 function toggleTheme() {

@@ -11,6 +11,7 @@ import { useNavigationLoadingState } from '@/composables/useNavigationLoading'
 import { useRoutePrefetch } from '@/composables/useRoutePrefetch'
 import { resolveDocumentTitle } from './title'
 import { DEFAULT_SITE_NAME } from '@/constants/branding'
+import { redirectToConsole } from '@/utils/navigation'
 
 /**
  * Route definitions with lazy loading
@@ -457,7 +458,23 @@ const navigationLoading = useNavigationLoadingState()
 let routePrefetch: ReturnType<typeof useRoutePrefetch> | null = null
 const BACKEND_MODE_ALLOWED_PATHS = ['/login', '/key-usage', '/setup']
 
+// 开发者中心(用户管理 + 管理后台)统一由 new-api 原生 React 控制台承载,后端挂在 /admin。
+// 星算 Vue 只保留聊天前台:命中这些前缀的导航整页跳转到 /admin 交给后端返回 React
+// (绕过 Vue Router;同源 session cookie 共享,跳过去仍是登录态)。
+const CONSOLE_REDIRECT_PATHS = [
+  '/dashboard', '/keys', '/usage', '/redeem', '/profile',
+  '/subscriptions', '/purchase', '/wallet', '/admin'
+]
+
 router.beforeEach((to, _from, next) => {
+  // 开发者中心由 new-api 原生 React 承载:整页跳转到 /admin 交给后端返回控制台。
+  // 在 startNavigation 之前判断,避免启动了加载态又被整页重载丢弃(afterEach 不会跑)。
+  // 不调 next,window.location 重载页面会中止当前 SPA 导航。
+  if (CONSOLE_REDIRECT_PATHS.some((p) => to.path === p || to.path.startsWith(p + '/'))) {
+    redirectToConsole()
+    return
+  }
+
   // 开始导航加载状态
   navigationLoading.startNavigation()
 
