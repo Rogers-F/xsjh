@@ -5,6 +5,7 @@ import (
 	"io/fs"
 	"net/http"
 	"os"
+	"strings"
 
 	"github.com/gin-contrib/static"
 )
@@ -16,11 +17,24 @@ type embedFileSystem struct {
 }
 
 func (e *embedFileSystem) Exists(prefix string, path string) bool {
-	_, err := e.Open(path)
-	if err != nil {
+	// The request path still carries the static.Serve() mount prefix (e.g.
+	// "/admin/static/app.js" for static.Serve("/admin", ...)), but the embedded
+	// files live without it ("static/app.js"). Strip the prefix before probing,
+	// exactly as the http.StripPrefix wrapper does for the file server itself —
+	// otherwise every sub-path mount (the React console under /admin) misses and
+	// falls through to the SPA index, serving HTML for .js/.css (white screen).
+	// The root mount ("/") is unaffected: stripping "/" is a no-op for lookups.
+	name := strings.TrimPrefix(path, prefix)
+	if len(name) == len(path) {
+		// path doesn't carry this mount's prefix, so it isn't served here.
+		// Return false (don't probe the raw path) so this mount can't "claim" a
+		// sibling mount's file: static.Serve registers /admin before /, and if
+		// the /admin FS happened to hold a root-named file it would claim it,
+		// then http.StripPrefix("/admin") would 404 — starving the root FS.
 		return false
 	}
-	return true
+	_, err := e.Open(name)
+	return err == nil
 }
 
 func (e *embedFileSystem) Open(name string) (http.File, error) {
