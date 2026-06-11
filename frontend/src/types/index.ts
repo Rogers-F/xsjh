@@ -27,18 +27,37 @@ export interface FetchOptions {
 export interface User {
   id: number
   username: string
-  email: string
-  role: 'admin' | 'user' // User role for authorization
-  balance: number // User balance for API usage
-  concurrency: number // Allowed concurrent requests
-  status: 'active' | 'disabled' // Account status
-  allowed_groups: number[] | null // Allowed group IDs (null = all non-exclusive groups)
+  display_name?: string // Backend display name
+  email?: string // Returned by the profile endpoint; absent in the login payload
+  role: number // Backend role: 1 user, 10 admin, 100 root
+  status: number // Account status: 1 enabled, 2 disabled
+  group?: string // Backend user group name
+  quota?: number // Integer quota units; dollar balance = quotaToUSD(quota)
+  used_quota?: number // Integer quota units consumed
+  balance?: number // Legacy gateway field, not provided by the new backend
+  concurrency?: number // Legacy gateway field
+  allowed_groups?: number[] | null // Legacy gateway field
   subscriptions?: UserSubscription[] // User's active subscriptions
-  created_at: string
-  updated_at: string
+  created_at?: string
+  updated_at?: string
 }
 
-export interface AdminUser extends User {
+// Admin user-management surface still speaks the legacy gateway shape
+// (string role/status + the gateway-only fields). The admin pages that consume
+// this are migrated separately; keep the concrete shape so they stay intact.
+export interface AdminUser
+  extends Omit<
+    User,
+    'role' | 'status' | 'email' | 'balance' | 'concurrency' | 'allowed_groups' | 'created_at' | 'updated_at'
+  > {
+  email: string
+  role: 'admin' | 'user'
+  balance: number // User balance for API usage
+  concurrency: number // Allowed concurrent requests
+  status: 'active' | 'disabled'
+  allowed_groups: number[] | null // Allowed group IDs (null = all non-exclusive groups)
+  created_at: string
+  updated_at: string
   // 管理员备注（普通用户接口不返回）
   notes: string
   // 用户专属分组倍率配置 (group_id -> rate_multiplier)
@@ -115,20 +134,16 @@ export interface PublicSettings {
   linuxdo_oauth_enabled: boolean
   backend_mode_enabled: boolean
   version: string
-  // When 'newapi_bff', the chat page streams via a same-origin JWT-authenticated
-  // backend endpoint instead of the sub2api gateway + sk- key. Defaults to 'sub2api'.
+  // When 'newapi_bff', the chat page streams via the same-origin session-authenticated
+  // backend endpoint instead of the sub2api gateway + sk- key. The fused deployment
+  // defaults to 'newapi_bff', delivered by GET /api/public-settings.
   chat_provider_mode?: 'sub2api' | 'newapi_bff'
   // External console URL used by the homepage developer-console card in newapi_bff mode.
   newapi_console_url?: string
 }
 
-export interface AuthResponse {
-  access_token: string
-  refresh_token?: string  // New: Refresh Token for token renewal
-  expires_in?: number     // New: Access Token expiry time in seconds
-  token_type: string
-  user: User & { run_mode?: 'standard' | 'simple' }
-}
+// Login / 2FA success returns the user object directly (cookie-session, no token wrapper).
+export type AuthResponse = User
 
 export interface CurrentUserResponse extends User {
   run_mode?: 'standard' | 'simple'
@@ -392,9 +407,9 @@ export interface UserStats {
 // ==================== API Response Types ====================
 
 export interface ApiResponse<T = unknown> {
-  code: number
+  success: boolean
   message: string
-  data: T
+  data?: T
 }
 
 export interface ApiError {
@@ -523,12 +538,13 @@ export interface AdminGroup extends Group {
 export interface ApiKey {
   id: number
   user_id: number
-  key: string
+  key: string // ALWAYS masked in lists; plaintext only via keysAPI.getKey()
   name: string
-  group_id: number | null
+  group_id: number | null // Legacy numeric id; the backend keys groups by NAME
+  group_name?: string // Backend group name ('' = user default group)
   status: 'active' | 'inactive' | 'quota_exhausted' | 'expired'
-  ip_whitelist: string[]
-  ip_blacklist: string[]
+  ip_whitelist: string[] // Legacy; no backend equivalent (always [])
+  ip_blacklist: string[] // Legacy; no backend equivalent (always [])
   last_used_at: string | null
   quota: number // Quota limit in USD (0 = unlimited)
   quota_used: number // Used quota amount in USD
@@ -536,46 +552,21 @@ export interface ApiKey {
   created_at: string
   updated_at: string
   group?: Group
+  model_limits_enabled?: boolean
+  model_limits?: string[]
+  // Legacy rate-limit windows; no backend equivalent (always 0/null)
   rate_limit_5h: number
   rate_limit_1d: number
   rate_limit_7d: number
   usage_5h: number
   usage_1d: number
   usage_7d: number
-  window_5h_start: string | null
-  window_1d_start: string | null
-  window_7d_start: string | null
-  reset_5h_at: string | null
-  reset_1d_at: string | null
-  reset_7d_at: string | null
-}
-
-export interface CreateApiKeyRequest {
-  name: string
-  group_id?: number | null
-  custom_key?: string // Optional custom API Key
-  ip_whitelist?: string[]
-  ip_blacklist?: string[]
-  quota?: number // Quota limit in USD (0 = unlimited)
-  expires_in_days?: number // Days until expiry (null = never expires)
-  rate_limit_5h?: number
-  rate_limit_1d?: number
-  rate_limit_7d?: number
-}
-
-export interface UpdateApiKeyRequest {
-  name?: string
-  group_id?: number | null
-  status?: 'active' | 'inactive'
-  ip_whitelist?: string[]
-  ip_blacklist?: string[]
-  quota?: number // Quota limit in USD (null = no change, 0 = unlimited)
-  expires_at?: string | null // Expiration time (null = no change)
-  reset_quota?: boolean // Reset quota_used to 0
-  rate_limit_5h?: number
-  rate_limit_1d?: number
-  rate_limit_7d?: number
-  reset_rate_limit_usage?: boolean
+  window_5h_start?: string | null
+  window_1d_start?: string | null
+  window_7d_start?: string | null
+  reset_5h_at?: string | null
+  reset_1d_at?: string | null
+  reset_7d_at?: string | null
 }
 
 export interface CreateGroupRequest {
@@ -1109,8 +1100,13 @@ export interface UsageLog {
 
   created_at: string
 
+  // Free-text entry content (credit/topup log rows carry the description here).
+  content?: string
+
   user?: User
-  api_key?: ApiKey
+  // Consumers only ever read .name; the backend log row carries the token name,
+  // not a full key object.
+  api_key?: { name: string } & Partial<ApiKey>
   group?: Group
   subscription?: UserSubscription
 }
@@ -1362,11 +1358,6 @@ export interface UserCommissionRateInfo {
   user_commission_rate: number | null
   global_commission_rate: number
   effective_rate: number
-}
-
-export interface ChangePasswordRequest {
-  old_password: string
-  new_password: string
 }
 
 // ==================== User Subscription Types ====================
@@ -1663,14 +1654,11 @@ export interface TotpVerificationMethod {
 }
 
 export interface TotpLoginResponse {
-  requires_2fa: boolean
-  temp_token?: string
-  user_email_masked?: string
+  require_2fa: boolean
 }
 
 export interface TotpLogin2FARequest {
-  temp_token: string
-  totp_code: string
+  code: string
 }
 
 // ==================== Scheduled Test Types ====================

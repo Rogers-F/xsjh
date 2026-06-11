@@ -7,6 +7,8 @@ vi.mock('@/i18n', () => ({
   getLocale: () => 'zh-CN',
 }))
 
+const okEnvelope = { success: true, data: {}, message: '' }
+
 describe('API Client', () => {
   let apiClient: AxiosInstance
 
@@ -25,13 +27,12 @@ describe('API Client', () => {
   // --- 请求拦截器 ---
 
   describe('请求拦截器', () => {
-    it('自动附加 Authorization 头', async () => {
-      localStorage.setItem('auth_token', 'my-jwt-token')
+    it('有 stored user id 时附加 New-Api-User 头', async () => {
+      localStorage.setItem('new_api_user_id', '42')
 
-      // 拦截实际请求
       const adapter = vi.fn().mockResolvedValue({
         status: 200,
-        data: { code: 0, data: {} },
+        data: okEnvelope,
         headers: {},
         config: {},
         statusText: 'OK',
@@ -41,13 +42,31 @@ describe('API Client', () => {
       await apiClient.get('/test')
 
       const config = adapter.mock.calls[0][0]
-      expect(config.headers.get('Authorization')).toBe('Bearer my-jwt-token')
+      expect(config.headers.get('New-Api-User')).toBe('42')
     })
 
-    it('无 token 时不附加 Authorization 头', async () => {
+    it('无 stored user id 时不附加 New-Api-User 头', async () => {
       const adapter = vi.fn().mockResolvedValue({
         status: 200,
-        data: { code: 0, data: {} },
+        data: okEnvelope,
+        headers: {},
+        config: {},
+        statusText: 'OK',
+      })
+      apiClient.defaults.adapter = adapter
+
+      await apiClient.get('/test')
+
+      const config = adapter.mock.calls[0][0]
+      expect(config.headers.get('New-Api-User')).toBeFalsy()
+    })
+
+    it('cookie-session 下不再附加 Authorization 头', async () => {
+      localStorage.setItem('new_api_user_id', '42')
+
+      const adapter = vi.fn().mockResolvedValue({
+        status: 200,
+        data: okEnvelope,
         headers: {},
         config: {},
         statusText: 'OK',
@@ -63,7 +82,7 @@ describe('API Client', () => {
     it('GET 请求自动附加 timezone 参数', async () => {
       const adapter = vi.fn().mockResolvedValue({
         status: 200,
-        data: { code: 0, data: {} },
+        data: okEnvelope,
         headers: {},
         config: {},
         statusText: 'OK',
@@ -79,7 +98,7 @@ describe('API Client', () => {
     it('POST 请求不附加 timezone 参数', async () => {
       const adapter = vi.fn().mockResolvedValue({
         status: 200,
-        data: { code: 0, data: {} },
+        data: okEnvelope,
         headers: {},
         config: {},
         statusText: 'OK',
@@ -93,13 +112,13 @@ describe('API Client', () => {
     })
   })
 
-  // --- 响应拦截器 ---
+  // --- 响应拦截器（new-api {success,message,data} 信封）---
 
   describe('响应拦截器', () => {
-    it('code=0 时解包 data 字段', async () => {
+    it('success:true 时解包 data 字段', async () => {
       const adapter = vi.fn().mockResolvedValue({
         status: 200,
-        data: { code: 0, data: { name: 'test' }, message: 'ok' },
+        data: { success: true, data: { name: 'test' }, message: '' },
         headers: {},
         config: {},
         statusText: 'OK',
@@ -110,10 +129,11 @@ describe('API Client', () => {
       expect(response.data).toEqual({ name: 'test' })
     })
 
-    it('code!=0 时拒绝并返回结构化错误', async () => {
+    it('success:false（HTTP 200）时拒绝并返回 {status, message}', async () => {
+      // new-api 把逻辑错误以 HTTP 200 + {success:false} 返回；必须在成功回调里拒绝。
       const adapter = vi.fn().mockResolvedValue({
         status: 200,
-        data: { code: 1001, message: '参数错误', data: null },
+        data: { success: false, message: '参数错误' },
         headers: {},
         config: {},
         statusText: 'OK',
@@ -122,19 +142,33 @@ describe('API Client', () => {
 
       await expect(apiClient.get('/test')).rejects.toEqual(
         expect.objectContaining({
-          code: 1001,
+          status: 200,
           message: '参数错误',
         })
       )
     })
+
+    it('非信封响应原样透传（relay / SSE / 二进制）', async () => {
+      const adapter = vi.fn().mockResolvedValue({
+        status: 200,
+        data: 'raw-body',
+        headers: {},
+        config: {},
+        statusText: 'OK',
+      })
+      apiClient.defaults.adapter = adapter
+
+      const response = await apiClient.get('/test')
+      expect(response.data).toBe('raw-body')
+    })
   })
 
-  // --- 401 Token 刷新 ---
+  // --- 401（无 token 刷新；清除会话缓存并跳转）---
 
-  describe('401 Token 刷新', () => {
-    it('无 refresh_token 时 401 清除 localStorage', async () => {
-      localStorage.setItem('auth_token', 'expired-token')
-      // 不设置 refresh_token
+  describe('401 处理', () => {
+    it('401 清除 stored auth（不再尝试刷新）', async () => {
+      localStorage.setItem('new_api_user_id', '42')
+      localStorage.setItem('new_api_user', JSON.stringify({ id: 42 }))
 
       // Mock window.location
       const originalLocation = window.location
@@ -146,11 +180,11 @@ describe('API Client', () => {
       const adapter = vi.fn().mockRejectedValue({
         response: {
           status: 401,
-          data: { code: 'TOKEN_EXPIRED', message: 'Token expired' },
+          data: { success: false, message: '未登录' },
         },
         config: {
           url: '/test',
-          headers: { Authorization: 'Bearer expired-token' },
+          headers: {},
         },
         code: 'ERR_BAD_REQUEST',
       })
@@ -158,7 +192,8 @@ describe('API Client', () => {
 
       await expect(apiClient.get('/test')).rejects.toBeDefined()
 
-      expect(localStorage.getItem('auth_token')).toBeNull()
+      expect(localStorage.getItem('new_api_user_id')).toBeNull()
+      expect(localStorage.getItem('new_api_user')).toBeNull()
 
       // 恢复 location
       Object.defineProperty(window, 'location', {

@@ -199,13 +199,14 @@ import { useI18n } from 'vue-i18n'
 import { useAuthStore, useAppStore } from '@/stores'
 import LocaleSwitcher from '@/components/common/LocaleSwitcher.vue'
 import Icon from '@/components/icons/Icon.vue'
+import { DEFAULT_SITE_NAME } from '@/constants/branding'
 
 const { t } = useI18n()
 const authStore = useAuthStore()
 const appStore = useAppStore()
 
 // === Public settings (admin-controlled) ===
-const siteName = computed(() => appStore.cachedPublicSettings?.site_name || appStore.siteName || '星算')
+const siteName = computed(() => appStore.cachedPublicSettings?.site_name || appStore.siteName || DEFAULT_SITE_NAME)
 const siteLogo = computed(() => appStore.cachedPublicSettings?.site_logo || appStore.siteLogo || '')
 const docUrl = computed(() => appStore.cachedPublicSettings?.doc_url || appStore.docUrl || '')
 const homeContent = computed(() => appStore.cachedPublicSettings?.home_content || '')

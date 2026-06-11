@@ -22,11 +22,9 @@
               <p class="text-xs text-secondary-fg">{{ formatDateTime(log.created_at) }}</p>
             </div>
           </div>
+          <!-- Single cost: total_cost equals actual_cost in this backend. -->
           <div class="text-right">
-            <p class="text-sm font-semibold">
-              <span class="text-green-600 dark:text-green-400" :title="t('dashboard.actual')">${{ formatCost(log.actual_cost) }}</span>
-              <span class="font-normal text-dust-400 dark:text-pearl-300" :title="t('dashboard.standard')"> / ${{ formatCost(log.total_cost) }}</span>
-            </p>
+            <p class="text-sm font-semibold text-green-600 dark:text-green-400">${{ formatCost(log.total_cost) }}</p>
             <p class="text-xs text-secondary-fg">{{ (log.input_tokens + log.output_tokens).toLocaleString() }} tokens</p>
           </div>
         </div>

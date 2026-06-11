@@ -1,48 +1,43 @@
 /**
- * User API endpoints
- * Handles user profile management and password changes
+ * User profile — backed by the native /user/self endpoints.
+ *
+ * GET /user/self has NO created_at / concurrency / balance fields; the dollar
+ * balance is derived as quotaToUSD(user.quota) (see utils/quota.ts).
+ * PUT /user/self handles both profile edits ({username, display_name}) and
+ * password changes ({original_password, password}).
  */
 
 import { apiClient } from './client'
-import type { User, ChangePasswordRequest } from '@/types'
+import type { User } from '@/types'
 
-/**
- * Get current user profile
- * @returns User profile data
- */
+/** Current user (same payload the auth store caches). */
 export async function getProfile(): Promise<User> {
-  const { data } = await apiClient.get<User>('/user/profile')
+  const { data } = await apiClient.get<User>('/user/self')
   return data
 }
 
-/**
- * Update current user profile
- * @param profile - Profile data to update
- * @returns Updated user profile data
- */
+/** Update profile fields. The backend re-validates the WHOLE user struct
+ * (username mandatory) and ALWAYS verifies original_password before applying
+ * any self update — so the current password is required even for a rename.
+ * It replies with a success message only — refresh the cached user afterwards. */
 export async function updateProfile(profile: {
-  username?: string
-}): Promise<User> {
-  const { data } = await apiClient.put<User>('/user', profile)
-  return data
+  username: string
+  display_name?: string
+  original_password: string
+}): Promise<void> {
+  await apiClient.put('/user/self', profile)
 }
 
-/**
- * Change current user password
- * @param passwords - Old and new password
- * @returns Success message
- */
-export async function changePassword(
-  oldPassword: string,
-  newPassword: string
-): Promise<{ message: string }> {
-  const payload: ChangePasswordRequest = {
-    old_password: oldPassword,
-    new_password: newPassword
-  }
-
-  const { data } = await apiClient.put<{ message: string }>('/user/password', payload)
-  return data
+/** Change password; the backend validates original_password ("原密码错误" on
+ * mismatch — surface its message verbatim). The struct validation also requires
+ * username, so the current one is fetched and sent along. */
+export async function changePassword(oldPassword: string, newPassword: string): Promise<void> {
+  const current = await getProfile()
+  await apiClient.put('/user/self', {
+    username: current.username,
+    original_password: oldPassword,
+    password: newPassword
+  })
 }
 
 export const userAPI = {

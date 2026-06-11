@@ -1,35 +1,32 @@
 /**
- * User Groups API endpoints (non-admin)
- * Handles group-related operations for regular users
+ * User group options — backed by GET /user/self/groups.
+ *
+ * The backend returns a MAP of group name -> { ratio, desc } (no numeric ids;
+ * tokens reference groups by name string).
  */
 
 import { apiClient } from './client'
-import type { Group } from '@/types'
 
-/**
- * Get available groups that the current user can bind to API keys
- * This returns groups based on user's permissions:
- * - Standard groups: public (non-exclusive) or explicitly allowed
- * - Subscription groups: user has active subscription
- * @returns List of available groups
- */
-export async function getAvailable(): Promise<Group[]> {
-  const { data } = await apiClient.get<Group[]>('/groups/available')
-  return data
+export interface UserGroupOption {
+  name: string
+  ratio: number
+  desc: string
 }
 
-/**
- * Get current user's custom group rate multipliers
- * @returns Map of group_id to custom rate_multiplier
- */
-export async function getUserGroupRates(): Promise<Record<number, number>> {
-  const { data } = await apiClient.get<Record<number, number> | null>('/groups/rates')
-  return data || {}
+/** Groups the current user may bind to API keys. */
+export async function getAvailable(): Promise<UserGroupOption[]> {
+  const { data } = await apiClient.get<Record<string, { ratio?: number; desc?: string }>>(
+    '/user/self/groups'
+  )
+  return Object.entries(data ?? {}).map(([name, info]) => ({
+    name,
+    ratio: typeof info?.ratio === 'number' ? info.ratio : 1,
+    desc: info?.desc ?? ''
+  }))
 }
 
 export const userGroupsAPI = {
-  getAvailable,
-  getUserGroupRates
+  getAvailable
 }
 
 export default userGroupsAPI

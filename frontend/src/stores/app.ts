@@ -11,7 +11,8 @@ import {
   type VersionInfo,
   type ReleaseInfo
 } from '@/api/admin/system'
-import { getPublicSettings as fetchPublicSettingsAPI } from '@/api/auth'
+import { getPublicSettings as fetchPublicSettingsAPI, PUBLIC_SETTINGS_FALLBACK } from '@/api/auth'
+import { DEFAULT_SITE_NAME } from '@/constants/branding'
 
 export const useAppStore = defineStore('app', () => {
   // ==================== State ====================
@@ -24,7 +25,7 @@ export const useAppStore = defineStore('app', () => {
   // Public settings cache state
   const publicSettingsLoaded = ref<boolean>(false)
   const publicSettingsLoading = ref<boolean>(false)
-  const siteName = ref<string>('Sub2API')
+  const siteName = ref<string>(DEFAULT_SITE_NAME)
   const siteLogo = ref<string>('')
   const siteVersion = ref<string>('')
   const contactInfo = ref<string>('')
@@ -48,11 +49,16 @@ export const useAppStore = defineStore('app', () => {
 
   const hasActiveToasts = computed(() => toasts.value.length > 0)
   const backendModeEnabled = computed(() => cachedPublicSettings.value?.backend_mode_enabled ?? false)
-  // When true, the chat page streams via the same-origin JWT-authenticated backend
-  // (new-api BFF) instead of the sub2api gateway + sk- key. Defaults to false.
-  const newApiBffEnabled = computed(
-    () => cachedPublicSettings.value?.chat_provider_mode === 'newapi_bff'
-  )
+  // When true, the chat page streams via the same-origin session-authenticated
+  // backend (BFF) instead of the legacy gateway + sk- key. Single owner of the
+  // decision: before public settings load, fall back to the injected config so
+  // early consumers (router guards) see the same value.
+  const newApiBffEnabled = computed(() => {
+    const mode =
+      cachedPublicSettings.value?.chat_provider_mode ??
+      window.__APP_CONFIG__?.chat_provider_mode
+    return mode === 'newapi_bff'
+  })
 
   const loadingCount = ref<number>(0)
 
@@ -290,7 +296,7 @@ export const useAppStore = defineStore('app', () => {
    */
   function applySettings(config: PublicSettings): void {
     cachedPublicSettings.value = config
-    siteName.value = config.site_name || 'Sub2API'
+    siteName.value = config.site_name || DEFAULT_SITE_NAME
     siteLogo.value = config.site_logo || ''
     siteVersion.value = config.version || ''
     contactInfo.value = config.contact_info || ''
@@ -315,34 +321,7 @@ export const useAppStore = defineStore('app', () => {
       if (cachedPublicSettings.value) {
         return { ...cachedPublicSettings.value }
       }
-      return {
-        registration_enabled: false,
-        email_verify_enabled: false,
-        registration_email_suffix_whitelist: [],
-        promo_code_enabled: true,
-        password_reset_enabled: false,
-        invitation_code_enabled: false,
-        turnstile_enabled: false,
-        turnstile_site_key: '',
-        site_name: siteName.value,
-        site_logo: siteLogo.value,
-        site_subtitle: '',
-        api_base_url: apiBaseUrl.value,
-        contact_info: contactInfo.value,
-        doc_url: docUrl.value,
-        home_content: '',
-        hide_ccs_import_button: false,
-        purchase_subscription_enabled: false,
-        purchase_subscription_url: '',
-        payg_enabled: false,
-        payg_exchange_rate: 1,
-        payg_fixed_amount_options: [],
-        custom_menu_items: [],
-        custom_endpoints: [],
-        linuxdo_oauth_enabled: false,
-        backend_mode_enabled: false,
-        version: siteVersion.value
-      }
+      return { ...PUBLIC_SETTINGS_FALLBACK }
     }
 
     // Prevent duplicate requests

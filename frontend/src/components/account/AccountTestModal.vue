@@ -216,6 +216,7 @@ import TextArea from '@/components/common/TextArea.vue'
 import { Icon } from '@/components/icons'
 import { useClipboard } from '@/composables/useClipboard'
 import { adminAPI } from '@/api/admin'
+import { getStoredUserId } from '@/api/client'
 import type { Account, ClaudeModel } from '@/types'
 
 const { t } = useI18n()
@@ -373,8 +374,13 @@ const startTest = async () => {
     // Use fetch with streaming for SSE since EventSource doesn't support POST
     const response = await fetch(url, {
       method: 'POST',
+      // ORPHANED under new-api (no /api/v1/admin/accounts/:id/test route); kept only
+      // so removing the legacy auth_token leaves no dangling read. Use cookie +
+      // New-Api-User like the axios client so the transport auth stays consistent if
+      // a backend is added.
+      credentials: 'include',
       headers: {
-        Authorization: `Bearer ${localStorage.getItem('auth_token')}`,
+        'New-Api-User': getStoredUserId() ?? '',
         'Content-Type': 'application/json'
       },
       body: JSON.stringify({

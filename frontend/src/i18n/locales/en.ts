@@ -787,6 +787,8 @@ export default {
     disable: 'Disable',
     nameLabel: 'Name',
     namePlaceholder: 'My API Key',
+    nameMaxLengthHint: 'Up to 50 characters.',
+    failedToFetchKey: 'Failed to fetch the API key',
     groupLabel: 'Group',
     selectGroup: 'Select a group',
     statusLabel: 'Status',
@@ -1038,7 +1040,9 @@ export default {
     codeRedeemSuccess: 'Code redeemed successfully!',
     failedToRedeem: 'Failed to redeem code. Please check the code and try again.',
     subscriptionRefreshFailed: 'Redeemed successfully, but failed to refresh subscription status.',
-    pleaseEnterCode: 'Please enter a redeem code'
+    pleaseEnterCode: 'Please enter a redeem code',
+    creditRecords: 'Account Credit Records',
+    creditRecordsEmpty: 'Your account credit records will appear here'
   },
 
   // Profile
@@ -1052,6 +1056,8 @@ export default {
     user: 'User',
     username: 'Username',
     enterUsername: 'Enter username',
+    displayName: 'Display Name',
+    enterDisplayName: 'Enter display name',
     editProfile: 'Edit Profile',
     updateProfile: 'Update Profile',
     updating: 'Updating...',
@@ -1060,6 +1066,7 @@ export default {
     usernameRequired: 'Username is required',
     changePassword: 'Change Password',
     currentPassword: 'Current Password',
+    currentPasswordRequired: 'Current password is required to save profile changes',
     newPassword: 'New Password',
     confirmNewPassword: 'Confirm New Password',
     passwordHint: 'Password must be at least 8 characters long',
@@ -4776,7 +4783,15 @@ export default {
     notEnabledDesc: 'The administrator has not enabled the recharge/subscription entry. Please contact admin.',
     notConfiguredTitle: 'Recharge / Subscription URL not configured',
     notConfiguredDesc:
-      'The administrator enabled the entry but has not configured a recharge/subscription URL. Please contact admin.'
+      'The administrator enabled the entry but has not configured a recharge/subscription URL. Please contact admin.',
+    duration: 'Duration',
+    quota: 'Quota',
+    purchaseLimit: 'Purchase limit per user',
+    balancePay: 'Pay with Balance',
+    balancePayUnavailable: 'Balance pay unavailable',
+    confirmTitle: 'Confirm Purchase',
+    confirmMessage: 'Pay {price} from your balance to purchase "{plan}"?',
+    paySuccess: 'Purchase successful'
   },
 
   wallet: {
@@ -4825,7 +4840,12 @@ export default {
     createOrderFailed: 'Failed to create payment order',
     paymentSuccess: 'Payment successful. Wallet balance has been updated.',
     syncOrderFailed: 'Failed to sync order',
-    paymentCodeCopied: 'Payment link copied'
+    paymentCodeCopied: 'Payment link copied',
+    customAmountUsd: 'Enter amount (USD credit)',
+    minTopupHint: 'Minimum top-up: {min}',
+    payableAmount: 'Payable Amount',
+    onlineTopupDisabled: 'Online top-up is currently unavailable. Please contact the administrator.',
+    completedAt: 'Completed At'
   },
 
   // Custom Page (iframe embed)
@@ -4873,7 +4893,8 @@ export default {
     status: {
       active: 'Active',
       expired: 'Expired',
-      revoked: 'Revoked'
+      revoked: 'Revoked',
+      cancelled: 'Cancelled'
     },
     usage: 'Usage',
     expires: 'Expires',
@@ -4886,6 +4907,7 @@ export default {
     daysRemaining: '{days} days remaining',
     expiresOn: 'Expires on {date}',
     resetIn: 'Resets in {time}',
+    resetsAt: 'Resets at {time}',
     windowNotActive: 'Awaiting first use',
     usageOf: '{used} of {limit}'
   },

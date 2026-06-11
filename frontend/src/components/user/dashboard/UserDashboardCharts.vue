@@ -1,17 +1,12 @@
 <template>
   <div class="space-y-6">
-    <!-- Date Range Filter -->
+    <!-- Date Range Filter. Trend data is day-granularity only, and the parent
+         clamps the range to the backend's 30-day cap. -->
     <div class="card p-4">
       <div class="flex flex-wrap items-center gap-4">
         <div class="flex items-center gap-2">
           <span class="text-sm font-medium text-dust-700 dark:text-pearl-100">{{ t('dashboard.timeRange') }}:</span>
           <DateRangePicker :start-date="startDate" :end-date="endDate" @update:startDate="$emit('update:startDate', $event)" @update:endDate="$emit('update:endDate', $event)" @change="$emit('dateRangeChange', $event)" />
-        </div>
-        <div class="ml-auto flex items-center gap-2">
-          <span class="text-sm font-medium text-dust-700 dark:text-pearl-100">{{ t('dashboard.granularity') }}:</span>
-          <div class="w-28">
-            <Select :model-value="granularity" :options="[{value:'day', label:t('dashboard.day')}, {value:'hour', label:t('dashboard.hour')}]" @update:model-value="$emit('update:granularity', $event)" @change="$emit('granularityChange')" />
-          </div>
         </div>
       </div>
     </div>
@@ -31,13 +26,14 @@
           </div>
           <div class="max-h-48 flex-1 overflow-y-auto">
             <table class="w-full text-xs">
+              <!-- Single cost column: the backend bills one quota cost (no
+                   standard-vs-actual split). -->
               <thead>
                 <tr class="text-secondary-fg">
                   <th class="pb-2 text-left">{{ t('dashboard.model') }}</th>
                   <th class="pb-2 text-right">{{ t('dashboard.requests') }}</th>
                   <th class="pb-2 text-right">{{ t('dashboard.tokens') }}</th>
-                  <th class="pb-2 text-right">{{ t('dashboard.actual') }}</th>
-                  <th class="pb-2 text-right">{{ t('dashboard.standard') }}</th>
+                  <th class="pb-2 text-right">{{ t('usage.cost') }}</th>
                 </tr>
               </thead>
               <tbody>
@@ -45,8 +41,7 @@
                   <td class="max-w-[100px] truncate py-1.5 font-medium text-dust-900 dark:text-white" :title="model.model">{{ model.model }}</td>
                   <td class="py-1.5 text-right text-dust-600 dark:text-pearl-200">{{ formatNumber(model.requests) }}</td>
                   <td class="py-1.5 text-right text-dust-600 dark:text-pearl-200">{{ formatTokens(model.total_tokens) }}</td>
-                  <td class="py-1.5 text-right text-green-600 dark:text-green-400">${{ formatCost(model.actual_cost) }}</td>
-                  <td class="py-1.5 text-right text-dust-400 dark:text-pearl-300">${{ formatCost(model.cost) }}</td>
+                  <td class="py-1.5 text-right text-green-600 dark:text-green-400">${{ formatCost(model.cost) }}</td>
                 </tr>
               </tbody>
             </table>
@@ -54,8 +49,8 @@
         </div>
       </div>
 
-      <!-- Token Usage Trend Chart -->
-      <TokenUsageTrend :trend-data="trend" :loading="loading" />
+      <!-- Token Usage Trend Chart (totals only — no input/output split here) -->
+      <TokenUsageTrend :trend-data="trend" :loading="loading" :total-only="true" />
     </div>
   </div>
 </template>
@@ -65,7 +60,6 @@ import { computed } from 'vue'
 import { useI18n } from 'vue-i18n'
 import LoadingSpinner from '@/components/common/LoadingSpinner.vue'
 import DateRangePicker from '@/components/common/DateRangePicker.vue'
-import Select from '@/components/common/Select.vue'
 import { Doughnut } from 'vue-chartjs'
 import TokenUsageTrend from '@/components/charts/TokenUsageTrend.vue'
 import type { TrendDataPoint, ModelStat } from '@/types'
@@ -73,8 +67,8 @@ import { formatCostFixed as formatCost, formatNumberLocaleString as formatNumber
 import { Chart as ChartJS, CategoryScale, LinearScale, PointElement, LineElement, ArcElement, Title, Tooltip, Legend, Filler } from 'chart.js'
 ChartJS.register(CategoryScale, LinearScale, PointElement, LineElement, ArcElement, Title, Tooltip, Legend, Filler)
 
-const props = defineProps<{ loading: boolean, startDate: string, endDate: string, granularity: string, trend: TrendDataPoint[], models: ModelStat[] }>()
-defineEmits(['update:startDate', 'update:endDate', 'update:granularity', 'dateRangeChange', 'granularityChange'])
+const props = defineProps<{ loading: boolean, startDate: string, endDate: string, trend: TrendDataPoint[], models: ModelStat[] }>()
+defineEmits(['update:startDate', 'update:endDate', 'dateRangeChange'])
 const { t } = useI18n()
 
 const modelData = computed(() => !props.models?.length ? null : {

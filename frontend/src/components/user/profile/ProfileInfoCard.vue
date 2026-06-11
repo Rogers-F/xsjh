@@ -15,13 +15,13 @@
             {{ user?.email }}
           </h2>
           <div class="mt-1 flex items-center gap-2">
-            <span :class="['badge', user?.role === 'admin' ? 'badge-primary' : 'badge-gray']">
-              {{ user?.role === 'admin' ? t('profile.administrator') : t('profile.user') }}
+            <span :class="['badge', (user?.role ?? 0) >= 10 ? 'badge-primary' : 'badge-gray']">
+              {{ (user?.role ?? 0) >= 10 ? t('profile.administrator') : t('profile.user') }}
             </span>
             <span
-              :class="['badge', user?.status === 'active' ? 'badge-success' : 'badge-danger']"
+              :class="['badge', user?.status === 1 ? 'badge-success' : 'badge-danger']"
             >
-              {{ user?.status }}
+              {{ user?.status === 1 ? 'active' : 'disabled' }}
             </span>
           </div>
         </div>

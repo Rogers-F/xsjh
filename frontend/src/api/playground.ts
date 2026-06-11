@@ -140,7 +140,9 @@ export async function extractError(res: Response): Promise<ChatCompletionError> 
   const err = body?.error
   return {
     status: res.status,
-    message: err?.message || res.statusText || `HTTP ${res.status}`,
+    // Tolerate both the OpenAI `{error:{message}}` shape and the new-api
+    // `{success:false, message}` envelope (returned by the /pg session path).
+    message: err?.message || body?.message || res.statusText || `HTTP ${res.status}`,
     type: err?.type,
     raw: body
   }

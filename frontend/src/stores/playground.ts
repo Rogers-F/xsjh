@@ -15,7 +15,8 @@ import type {
   PlaygroundMessage,
   StreamStatus
 } from '@/types/playground'
-import type { ApiKey, Group } from '@/types'
+import type { ApiKey } from '@/types'
+import type { UserGroupOption } from '@/api/groups'
 
 interface PersistedConfig {
   inputs: PlaygroundInputs
@@ -59,7 +60,7 @@ export const usePlaygroundStore = defineStore('playground', () => {
 
   const status = ref<StreamStatus>(STREAM_STATUS.IDLE)
   const errorMessage = ref<string>('')
-  const groups = ref<Group[]>([])
+  const groups = ref<UserGroupOption[]>([])
   const apiKeys = ref<ApiKey[]>([])
   const models = ref<ModelOption[]>([])
   const resourcesLoading = ref<boolean>(false)
@@ -75,16 +76,17 @@ export const usePlaygroundStore = defineStore('playground', () => {
 
   const apiKey = computed<string>(() => selectedKey.value?.key ?? '')
 
-  const currentGroup = computed<Group | null>(() => {
+  const currentGroup = computed<UserGroupOption | null>(() => {
     const name = config.value.inputs.group
     if (!name) return null
     return groups.value.find((g) => g.name === name) ?? null
   })
 
+  // Keys reference groups by NAME on this backend (no numeric group ids).
   const apiKeysForCurrentGroup = computed<ApiKey[]>(() => {
     const group = currentGroup.value
     if (!group) return []
-    return apiKeys.value.filter((k) => k.group_id === group.id)
+    return apiKeys.value.filter((k) => k.group_name === group.name)
   })
 
   function setInput<K extends keyof PlaygroundInputs>(key: K, value: PlaygroundInputs[K]) {

@@ -15,14 +15,17 @@ function injectPublicSettings(backendUrl: string): Plugin {
       order: 'pre',
       async handler(html) {
         try {
-          const response = await fetch(`${backendUrl}/api/v1/settings/public`, {
+          const response = await fetch(`${backendUrl}/api/public-settings`, {
             signal: AbortSignal.timeout(2000)
           })
           if (response.ok) {
             const data = await response.json()
-            if (data.code === 0 && data.data) {
-              const script = `<script>window.__APP_CONFIG__=${JSON.stringify(data.data)};</script>`
-              return html.replace('</head>', `${script}\n</head>`)
+            if (data.success === true && data.data) {
+              // 与后端 RenderAppConfigScript 的转义口径一致：JSON.stringify 不转义
+              // '<'，恶意配置值可能以 </script> 闭合脚本元素（本插件仅 dev 生效，仍做纵深防御）
+              const payload = JSON.stringify(data.data).replace(/</g, '\\u003c')
+              const script = `<script>window.__APP_CONFIG__=${payload};</script>`
+              return html.replace('<!--app-config-->', script)
             }
           }
         } catch (e) {
@@ -37,8 +40,8 @@ function injectPublicSettings(backendUrl: string): Plugin {
 export default defineConfig(({ mode }) => {
   // 加载环境变量
   const env = loadEnv(mode, process.cwd(), '')
-  const backendUrl = env.VITE_DEV_PROXY_TARGET || 'http://localhost:8080'
-  const devPort = Number(env.VITE_DEV_PORT || 3000)
+  const backendUrl = env.VITE_DEV_PROXY_TARGET || 'http://localhost:3000'
+  const devPort = Number(env.VITE_DEV_PORT || 5173)
 
   return {
     plugins: [
@@ -62,7 +65,8 @@ export default defineConfig(({ mode }) => {
     __INTLIFY_JIT_COMPILATION__: true
   },
   build: {
-    outDir: '../backend/internal/web/dist',
+    // go:embed source for the root SPA (see main.go web/xingsuan/dist).
+    outDir: '../web/xingsuan/dist',
     emptyOutDir: true,
     rollupOptions: {
       output: {
@@ -116,6 +120,10 @@ export default defineConfig(({ mode }) => {
           changeOrigin: true
         },
         '/v1': {
+          target: backendUrl,
+          changeOrigin: true
+        },
+        '/pg': {
           target: backendUrl,
           changeOrigin: true
         },

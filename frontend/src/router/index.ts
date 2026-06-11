@@ -10,6 +10,7 @@ import { useAdminSettingsStore } from '@/stores/adminSettings'
 import { useNavigationLoadingState } from '@/composables/useNavigationLoading'
 import { useRoutePrefetch } from '@/composables/useRoutePrefetch'
 import { resolveDocumentTitle } from './title'
+import { DEFAULT_SITE_NAME } from '@/constants/branding'
 
 /**
  * Route definitions with lazy loading
@@ -169,6 +170,13 @@ const routes: RouteRecordRaw[] = [
     path: '/playground',
     name: 'Playground',
     component: () => import('@/views/user/PlaygroundView.vue'),
+    // The playground is retired while chat runs through the BFF — redirect to
+    // the chat page instead. Evaluated at navigation time via the store getter
+    // (which owns the injected-config fallback) so flipping chat_provider_mode
+    // back restores the page without code changes.
+    beforeEnter: () => {
+      return useAppStore().newApiBffEnabled ? { path: '/chat' } : true
+    },
     meta: {
       requiresAuth: true,
       requiresAdmin: false,
@@ -471,7 +479,7 @@ router.beforeEach((to, _from, next) => {
     const menuItem = publicItems.find((item) => item.id === id)
       ?? (authStore.isAdmin ? adminSettingsStore.customMenuItems.find((item) => item.id === id) : undefined)
     if (menuItem?.label) {
-      const siteName = appStore.siteName || 'Sub2API'
+      const siteName = appStore.siteName || DEFAULT_SITE_NAME
       document.title = `${menuItem.label} - ${siteName}`
     } else {
       document.title = resolveDocumentTitle(to.meta.title, appStore.siteName, to.meta.titleKey as string)

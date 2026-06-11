@@ -113,11 +113,11 @@ async function onGroupChange(value: string | number | boolean | null) {
   const group = store.groups.find((g) => g.name === groupName)
   if (!group) return
 
-  let key = resources.findActiveKeyForGroup(group.id)
+  let key = resources.findActiveKeyForGroup(group.name)
   if (!key) {
     creatingKey.value = true
     try {
-      key = await resources.createPlaygroundKey(group.id)
+      key = await resources.createPlaygroundKey(group.name)
     } finally {
       creatingKey.value = false
     }
@@ -157,7 +157,7 @@ async function onCreateKey() {
   if (!store.currentGroup) return
   creatingKey.value = true
   try {
-    const key = await resources.createPlaygroundKey(store.currentGroup.id)
+    const key = await resources.createPlaygroundKey(store.currentGroup.name)
     if (key) await selectKey(key.id, ++requestSeq)
   } finally {
     creatingKey.value = false

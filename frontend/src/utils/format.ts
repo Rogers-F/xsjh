@@ -122,6 +122,16 @@ export function formatDate(
 }
 
 /**
+ * Stable local-timezone YYYY-MM-DD key for day bucketing and date inputs
+ * (unlike formatDateOnly, which is locale-formatted display text).
+ */
+export function toLocalDayKey(date: Date): string {
+  const m = String(date.getMonth() + 1).padStart(2, '0')
+  const d = String(date.getDate()).padStart(2, '0')
+  return `${date.getFullYear()}-${m}-${d}`
+}
+
+/**
  * 格式化日期（只显示日期部分）
  * @param date 日期字符串或 Date 对象
  * @returns 格式化后的日期字符串

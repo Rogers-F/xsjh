@@ -2,13 +2,18 @@ import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest'
 import { setActivePinia, createPinia } from 'pinia'
 import { useAuthStore } from '@/stores/auth'
 
-// Mock authAPI
+// The store transitively imports api/client (for the session-cache helpers), which
+// imports the i18n locale getter; stub it so the import is side-effect free.
+vi.mock('@/i18n', () => ({
+  getLocale: () => 'zh-CN',
+}))
+
+// Mock authAPI (the network layer). isTotp2FARequired mirrors the real guard.
 const mockLogin = vi.fn()
 const mockLogin2FA = vi.fn()
 const mockLogout = vi.fn()
 const mockGetCurrentUser = vi.fn()
 const mockRegister = vi.fn()
-const mockRefreshToken = vi.fn()
 
 vi.mock('@/api', () => ({
   authAPI: {
@@ -17,22 +22,18 @@ vi.mock('@/api', () => ({
     logout: (...args: any[]) => mockLogout(...args),
     getCurrentUser: (...args: any[]) => mockGetCurrentUser(...args),
     register: (...args: any[]) => mockRegister(...args),
-    refreshToken: (...args: any[]) => mockRefreshToken(...args),
   },
-  isTotp2FARequired: (response: any) => response?.requires_2fa === true,
+  isTotp2FARequired: (response: any) => response?.require_2fa === true,
 }))
 
+// Cookie-session: login/2FA return the User object directly (no token wrapper).
 const fakeUser = {
   id: 1,
   username: 'testuser',
   email: 'test@example.com',
-  role: 'user' as const,
-  balance: 100,
-  concurrency: 5,
-  status: 'active' as const,
-  allowed_groups: null,
-  created_at: '2024-01-01',
-  updated_at: '2024-01-01',
+  role: 1, // 1 = common user
+  status: 1, // 1 = enabled
+  group: 'default',
 }
 
 const fakeAdminUser = {
@@ -40,15 +41,7 @@ const fakeAdminUser = {
   id: 2,
   username: 'admin',
   email: 'admin@example.com',
-  role: 'admin' as const,
-}
-
-const fakeAuthResponse = {
-  access_token: 'test-token-123',
-  refresh_token: 'refresh-token-456',
-  expires_in: 3600,
-  token_type: 'Bearer',
-  user: { ...fakeUser },
+  role: 10, // 10 = admin
 }
 
 describe('useAuthStore', () => {
@@ -66,17 +59,19 @@ describe('useAuthStore', () => {
   // --- login ---
 
   describe('login', () => {
-    it('成功登录后设置 token 和 user', async () => {
-      mockLogin.mockResolvedValue(fakeAuthResponse)
+    it('成功登录后设置 user 并持久化 id/user（无 token）', async () => {
+      mockLogin.mockResolvedValue({ ...fakeUser })
       const store = useAuthStore()
 
       await store.login({ email: 'test@example.com', password: '123456' })
 
-      expect(store.token).toBe('test-token-123')
       expect(store.user).toEqual(fakeUser)
       expect(store.isAuthenticated).toBe(true)
-      expect(localStorage.getItem('auth_token')).toBe('test-token-123')
-      expect(localStorage.getItem('auth_user')).toBe(JSON.stringify(fakeUser))
+      expect(store.token).toBeNull() // 兼容访问器，cookie-session 下恒为 null
+      expect(localStorage.getItem('new_api_user_id')).toBe('1')
+      expect(localStorage.getItem('new_api_user')).toBe(JSON.stringify(fakeUser))
+      // 旧 JWT 键不应被写入
+      expect(localStorage.getItem('auth_token')).toBeNull()
     })
 
     it('登录失败时清除状态并抛出错误', async () => {
@@ -87,20 +82,19 @@ describe('useAuthStore', () => {
         'Invalid credentials'
       )
 
-      expect(store.token).toBeNull()
       expect(store.user).toBeNull()
       expect(store.isAuthenticated).toBe(false)
     })
 
     it('需要 2FA 时返回响应但不设置认证状态', async () => {
-      const twoFAResponse = { requires_2fa: true, temp_token: 'temp-123' }
+      const twoFAResponse = { require_2fa: true }
       mockLogin.mockResolvedValue(twoFAResponse)
       const store = useAuthStore()
 
       const result = await store.login({ email: 'test@example.com', password: '123456' })
 
       expect(result).toEqual(twoFAResponse)
-      expect(store.token).toBeNull()
+      expect(store.user).toBeNull()
       expect(store.isAuthenticated).toBe(false)
     })
   })
@@ -109,26 +103,22 @@ describe('useAuthStore', () => {
 
   describe('login2FA', () => {
     it('2FA 验证成功后设置认证状态', async () => {
-      mockLogin2FA.mockResolvedValue(fakeAuthResponse)
+      mockLogin2FA.mockResolvedValue({ ...fakeUser })
       const store = useAuthStore()
 
-      const user = await store.login2FA('temp-123', '654321')
+      const user = await store.login2FA('654321')
 
-      expect(store.token).toBe('test-token-123')
       expect(store.user).toEqual(fakeUser)
       expect(user).toEqual(fakeUser)
-      expect(mockLogin2FA).toHaveBeenCalledWith({
-        temp_token: 'temp-123',
-        totp_code: '654321',
-      })
+      expect(mockLogin2FA).toHaveBeenCalledWith({ code: '654321' })
     })
 
     it('2FA 验证失败时清除状态并抛出错误', async () => {
       mockLogin2FA.mockRejectedValue(new Error('Invalid TOTP'))
       const store = useAuthStore()
 
-      await expect(store.login2FA('temp-123', '000000')).rejects.toThrow('Invalid TOTP')
-      expect(store.token).toBeNull()
+      await expect(store.login2FA('000000')).rejects.toThrow('Invalid TOTP')
+      expect(store.user).toBeNull()
       expect(store.isAuthenticated).toBe(false)
     })
   })
@@ -136,8 +126,8 @@ describe('useAuthStore', () => {
   // --- logout ---
 
   describe('logout', () => {
-    it('注销后清除所有状态和 localStorage', async () => {
-      mockLogin.mockResolvedValue(fakeAuthResponse)
+    it('注销后清除所有状态和会话缓存', async () => {
+      mockLogin.mockResolvedValue({ ...fakeUser })
       mockLogout.mockResolvedValue(undefined)
       const store = useAuthStore()
 
@@ -148,77 +138,54 @@ describe('useAuthStore', () => {
       // 注销
       await store.logout()
 
-      expect(store.token).toBeNull()
       expect(store.user).toBeNull()
       expect(store.isAuthenticated).toBe(false)
-      expect(localStorage.getItem('auth_token')).toBeNull()
-      expect(localStorage.getItem('auth_user')).toBeNull()
-      expect(localStorage.getItem('refresh_token')).toBeNull()
-      expect(localStorage.getItem('token_expires_at')).toBeNull()
+      expect(localStorage.getItem('new_api_user_id')).toBeNull()
+      expect(localStorage.getItem('new_api_user')).toBeNull()
     })
   })
 
   // --- checkAuth ---
 
   describe('checkAuth', () => {
-    it('从 localStorage 恢复持久化状态', () => {
-      localStorage.setItem('auth_token', 'saved-token')
-      localStorage.setItem('auth_user', JSON.stringify(fakeUser))
+    it('从会话缓存恢复用户状态', () => {
+      localStorage.setItem('new_api_user', JSON.stringify(fakeUser))
+      localStorage.setItem('new_api_user_id', '1')
 
-      // Mock refreshUser (getCurrentUser) 防止后台刷新报错
+      // Mock refreshUser(getCurrentUser) 防止后台校验报错
       mockGetCurrentUser.mockResolvedValue({ data: fakeUser })
 
       const store = useAuthStore()
       store.checkAuth()
 
-      expect(store.token).toBe('saved-token')
       expect(store.user).toEqual(fakeUser)
       expect(store.isAuthenticated).toBe(true)
     })
 
-    it('localStorage 无数据时保持未认证状态', () => {
+    it('无缓存时保持未认证状态', () => {
       const store = useAuthStore()
       store.checkAuth()
 
-      expect(store.token).toBeNull()
       expect(store.user).toBeNull()
       expect(store.isAuthenticated).toBe(false)
     })
 
-    it('localStorage 中用户数据损坏时清除状态', () => {
-      localStorage.setItem('auth_token', 'saved-token')
-      localStorage.setItem('auth_user', 'invalid-json{{{')
+    it('缓存用户数据损坏时保持未认证（不崩溃）', () => {
+      localStorage.setItem('new_api_user', 'invalid-json{{{')
 
       const store = useAuthStore()
       store.checkAuth()
 
-      expect(store.token).toBeNull()
       expect(store.user).toBeNull()
-      expect(localStorage.getItem('auth_token')).toBeNull()
-    })
-
-    it('恢复 refresh token 和过期时间', () => {
-      const futureTs = String(Date.now() + 3600_000)
-      localStorage.setItem('auth_token', 'saved-token')
-      localStorage.setItem('auth_user', JSON.stringify(fakeUser))
-      localStorage.setItem('refresh_token', 'saved-refresh')
-      localStorage.setItem('token_expires_at', futureTs)
-
-      mockGetCurrentUser.mockResolvedValue({ data: fakeUser })
-
-      const store = useAuthStore()
-      store.checkAuth()
-
-      expect(store.isAuthenticated).toBe(true)
+      expect(store.isAuthenticated).toBe(false)
     })
   })
 
   // --- isAdmin ---
 
   describe('isAdmin', () => {
-    it('管理员用户返回 true', async () => {
-      const adminResponse = { ...fakeAuthResponse, user: { ...fakeAdminUser } }
-      mockLogin.mockResolvedValue(adminResponse)
+    it('管理员用户（role>=10）返回 true', async () => {
+      mockLogin.mockResolvedValue({ ...fakeAdminUser })
       const store = useAuthStore()
 
       await store.login({ email: 'admin@example.com', password: '123456' })
@@ -227,7 +194,7 @@ describe('useAuthStore', () => {
     })
 
     it('普通用户返回 false', async () => {
-      mockLogin.mockResolvedValue(fakeAuthResponse)
+      mockLogin.mockResolvedValue({ ...fakeUser })
       const store = useAuthStore()
 
       await store.login({ email: 'test@example.com', password: '123456' })
@@ -244,8 +211,8 @@ describe('useAuthStore', () => {
   // --- refreshUser ---
 
   describe('refreshUser', () => {
-    it('刷新用户数据并更新 localStorage', async () => {
-      mockLogin.mockResolvedValue(fakeAuthResponse)
+    it('刷新用户数据并更新会话缓存', async () => {
+      mockLogin.mockResolvedValue({ ...fakeUser })
       const store = useAuthStore()
       await store.login({ email: 'test@example.com', password: '123456' })
 
@@ -256,27 +223,32 @@ describe('useAuthStore', () => {
 
       expect(result).toEqual(updatedUser)
       expect(store.user).toEqual(updatedUser)
-      expect(JSON.parse(localStorage.getItem('auth_user')!)).toEqual(updatedUser)
+      expect(JSON.parse(localStorage.getItem('new_api_user')!)).toEqual(updatedUser)
     })
 
-    it('未认证时抛出错误', async () => {
+    it('401 时清除认证状态并抛出', async () => {
+      mockLogin.mockResolvedValue({ ...fakeUser })
       const store = useAuthStore()
-      await expect(store.refreshUser()).rejects.toThrow('Not authenticated')
+      await store.login({ email: 'test@example.com', password: '123456' })
+
+      mockGetCurrentUser.mockRejectedValue({ status: 401 })
+
+      await expect(store.refreshUser()).rejects.toBeDefined()
+      expect(store.user).toBeNull()
+      expect(store.isAuthenticated).toBe(false)
     })
   })
 
   // --- isSimpleMode ---
 
   describe('isSimpleMode', () => {
-    it('run_mode 为 simple 时返回 true', async () => {
-      const simpleResponse = {
-        ...fakeAuthResponse,
-        user: { ...fakeUser, run_mode: 'simple' as const },
-      }
-      mockLogin.mockResolvedValue(simpleResponse)
+    it('refreshUser 返回 run_mode=simple 时为 true', async () => {
+      mockLogin.mockResolvedValue({ ...fakeUser })
       const store = useAuthStore()
-
       await store.login({ email: 'test@example.com', password: '123456' })
+
+      mockGetCurrentUser.mockResolvedValue({ data: { ...fakeUser, run_mode: 'simple' } })
+      await store.refreshUser()
 
       expect(store.isSimpleMode).toBe(true)
     })

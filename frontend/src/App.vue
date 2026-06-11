@@ -15,6 +15,11 @@ const authStore = useAuthStore()
 const subscriptionStore = useSubscriptionStore()
 const announcementStore = useAnnouncementStore()
 
+// Post-login data features (subscriptions polling, announcements) target endpoints
+// that are migrated in a later phase. Gate their startup here so a logged-in user
+// does not trigger a flood of failing requests until those endpoints land.
+const POST_LOGIN_FEATURES_ENABLED: boolean = false
+
 /**
  * Update favicon dynamically
  * @param logoUrl - URL of the logo to use as favicon
@@ -44,7 +49,7 @@ watch(
 
 // Watch for authentication state and manage subscription data + announcements
 function onVisibilityChange() {
-  if (document.visibilityState === 'visible' && authStore.isAuthenticated) {
+  if (POST_LOGIN_FEATURES_ENABLED && document.visibilityState === 'visible' && authStore.isAuthenticated) {
     announcementStore.fetchAnnouncements()
   }
 }
@@ -53,23 +58,25 @@ watch(
   () => authStore.isAuthenticated,
   (isAuthenticated, oldValue) => {
     if (isAuthenticated) {
-      // User logged in: preload subscriptions and start polling
-      subscriptionStore.fetchActiveSubscriptions().catch((error) => {
-        console.error('Failed to preload subscriptions:', error)
-      })
-      subscriptionStore.startPolling()
+      if (POST_LOGIN_FEATURES_ENABLED) {
+        // User logged in: preload subscriptions and start polling
+        subscriptionStore.fetchActiveSubscriptions().catch((error) => {
+          console.error('Failed to preload subscriptions:', error)
+        })
+        subscriptionStore.startPolling()
 
-      // Announcements: new login vs page refresh restore
-      if (oldValue === false) {
-        // New login: delay 3s then force fetch
-        setTimeout(() => announcementStore.fetchAnnouncements(true), 3000)
-      } else {
-        // Page refresh restore (oldValue was undefined)
-        announcementStore.fetchAnnouncements()
+        // Announcements: new login vs page refresh restore
+        if (oldValue === false) {
+          // New login: delay 3s then force fetch
+          setTimeout(() => announcementStore.fetchAnnouncements(true), 3000)
+        } else {
+          // Page refresh restore (oldValue was undefined)
+          announcementStore.fetchAnnouncements()
+        }
+
+        // Register visibility change listener
+        document.addEventListener('visibilitychange', onVisibilityChange)
       }
-
-      // Register visibility change listener
-      document.addEventListener('visibilitychange', onVisibilityChange)
     } else {
       // User logged out: clear data and stop polling
       subscriptionStore.clear()
@@ -82,7 +89,7 @@ watch(
 
 // Route change trigger (throttled by store)
 router.afterEach(() => {
-  if (authStore.isAuthenticated) {
+  if (POST_LOGIN_FEATURES_ENABLED && authStore.isAuthenticated) {
     announcementStore.fetchAnnouncements()
   }
 })

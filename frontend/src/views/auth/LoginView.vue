@@ -187,7 +187,6 @@ import TurnstileWidget from '@/components/TurnstileWidget.vue'
 import { useAuthStore, useAppStore } from '@/stores'
 import { getPublicSettings, isTotp2FARequired } from '@/api/auth'
 import { sanitizeRedirectPath } from '@/utils/redirect'
-import type { TotpLoginResponse } from '@/types'
 
 const { t } = useI18n()
 
@@ -331,9 +330,7 @@ async function handleLogin(): Promise<void> {
 
     // Check if 2FA is required
     if (isTotp2FARequired(response)) {
-      const totpResponse = response as TotpLoginResponse
-      totpTempToken.value = totpResponse.temp_token || ''
-      totpUserEmailMasked.value = totpResponse.user_email_masked || ''
+      totpUserEmailMasked.value = formData.email
       show2FAModal.value = true
       isLoading.value = false
       return
@@ -380,7 +377,7 @@ async function handle2FAVerify(code: string): Promise<void> {
   }
 
   try {
-    await authStore.login2FA(totpTempToken.value, code)
+    await authStore.login2FA(code)
 
     // Close modal and show success
     show2FAModal.value = false

@@ -42,10 +42,10 @@
               </div>
               <div>
                 <h3 class="font-semibold text-primary-fg">
-                  {{ subscription.group?.name || `Group #${subscription.group_id}` }}
+                  {{ subscription.plan_title }}
                 </h3>
                 <p class="text-xs text-secondary-fg">
-                  {{ subscription.group?.description || '' }}
+                  {{ subscription.plan_subtitle || '' }}
                 </p>
               </div>
             </div>
@@ -59,7 +59,7 @@
                     : 'badge-danger'
               ]"
             >
-              {{ t(`userSubscriptions.status.${subscription.status}`) }}
+              {{ statusLabel(subscription.status) }}
             </span>
           </div>
 
@@ -83,127 +83,30 @@
               }}</span>
             </div>
 
-            <!-- Daily Usage -->
-            <div v-if="subscription.group?.daily_limit_usd" class="space-y-2">
+            <!-- Total Usage (single server-provided window) -->
+            <div v-if="subscription.usage_pct !== null" class="space-y-2">
               <div class="flex items-center justify-between">
                 <span class="text-sm font-medium text-dust-700 dark:text-pearl-100">
-                  {{ t('userSubscriptions.daily') }}
+                  {{ t('userSubscriptions.usage') }}
                 </span>
                 <span class="text-sm text-secondary-fg">
-                  ${{ (subscription.daily_usage_usd || 0).toFixed(2) }} / ${{
-                    subscription.group.daily_limit_usd.toFixed(2)
+                  ${{ subscription.amount_used_usd.toFixed(2) }} / ${{
+                    subscription.amount_total_usd.toFixed(2)
                   }}
                 </span>
               </div>
               <div class="relative h-2 overflow-hidden rounded-full bg-paper-200 dark:bg-ink-700">
                 <div
                   class="absolute inset-y-0 left-0 rounded-full transition-all duration-300"
-                  :class="
-                    getProgressBarClass(
-                      subscription.daily_usage_usd,
-                      subscription.group.daily_limit_usd
-                    )
-                  "
-                  :style="{
-                    width: getProgressWidth(
-                      subscription.daily_usage_usd,
-                      subscription.group.daily_limit_usd
-                    )
-                  }"
+                  :class="getProgressBarClass(subscription.usage_pct)"
+                  :style="{ width: `${Math.min(subscription.usage_pct, 100)}%` }"
                 ></div>
               </div>
-              <p
-                v-if="formatWindowStatus(subscription.daily_reset_status)"
-                class="text-xs text-secondary-fg whitespace-pre-line"
-                :class="getResetStatusClass(subscription.daily_reset_status)"
-              >
-                {{ formatWindowStatus(subscription.daily_reset_status) }}
-              </p>
             </div>
 
-            <!-- Weekly Usage -->
-            <div v-if="subscription.group?.weekly_limit_usd" class="space-y-2">
-              <div class="flex items-center justify-between">
-                <span class="text-sm font-medium text-dust-700 dark:text-pearl-100">
-                  {{ t('userSubscriptions.weekly') }}
-                </span>
-                <span class="text-sm text-secondary-fg">
-                  ${{ (subscription.weekly_usage_usd || 0).toFixed(2) }} / ${{
-                    subscription.group.weekly_limit_usd.toFixed(2)
-                  }}
-                </span>
-              </div>
-              <div class="relative h-2 overflow-hidden rounded-full bg-paper-200 dark:bg-ink-700">
-                <div
-                  class="absolute inset-y-0 left-0 rounded-full transition-all duration-300"
-                  :class="
-                    getProgressBarClass(
-                      subscription.weekly_usage_usd,
-                      subscription.group.weekly_limit_usd
-                    )
-                  "
-                  :style="{
-                    width: getProgressWidth(
-                      subscription.weekly_usage_usd,
-                      subscription.group.weekly_limit_usd
-                    )
-                  }"
-                ></div>
-              </div>
-              <p
-                v-if="formatWindowStatus(subscription.weekly_reset_status)"
-                class="text-xs text-secondary-fg whitespace-pre-line"
-                :class="getResetStatusClass(subscription.weekly_reset_status)"
-              >
-                {{ formatWindowStatus(subscription.weekly_reset_status) }}
-              </p>
-            </div>
-
-            <!-- Monthly Usage -->
-            <div v-if="subscription.group?.monthly_limit_usd" class="space-y-2">
-              <div class="flex items-center justify-between">
-                <span class="text-sm font-medium text-dust-700 dark:text-pearl-100">
-                  {{ t('userSubscriptions.monthly') }}
-                </span>
-                <span class="text-sm text-secondary-fg">
-                  ${{ (subscription.monthly_usage_usd || 0).toFixed(2) }} / ${{
-                    subscription.group.monthly_limit_usd.toFixed(2)
-                  }}
-                </span>
-              </div>
-              <div class="relative h-2 overflow-hidden rounded-full bg-paper-200 dark:bg-ink-700">
-                <div
-                  class="absolute inset-y-0 left-0 rounded-full transition-all duration-300"
-                  :class="
-                    getProgressBarClass(
-                      subscription.monthly_usage_usd,
-                      subscription.group.monthly_limit_usd
-                    )
-                  "
-                  :style="{
-                    width: getProgressWidth(
-                      subscription.monthly_usage_usd,
-                      subscription.group.monthly_limit_usd
-                    )
-                  }"
-                ></div>
-              </div>
-              <p
-                v-if="formatWindowStatus(subscription.monthly_reset_status)"
-                class="text-xs text-secondary-fg whitespace-pre-line"
-                :class="getResetStatusClass(subscription.monthly_reset_status)"
-              >
-                {{ formatWindowStatus(subscription.monthly_reset_status) }}
-              </p>
-            </div>
-
-            <!-- No limits configured - Unlimited badge -->
+            <!-- Unlimited badge (no amount cap on this plan) -->
             <div
-              v-if="
-                !subscription.group?.daily_limit_usd &&
-                !subscription.group?.weekly_limit_usd &&
-                !subscription.group?.monthly_limit_usd
-              "
+              v-else
               class="flex items-center justify-center rounded-xl bg-mint-500/10 py-6 dark:bg-mint-500/10"
             >
               <div class="flex items-center gap-3">
@@ -218,6 +121,14 @@
                 </div>
               </div>
             </div>
+
+            <!-- Next reset time -->
+            <p
+              v-if="subscription.next_reset_at"
+              class="text-xs text-secondary-fg"
+            >
+              {{ t('userSubscriptions.resetsAt', { time: formatDateTime(subscription.next_reset_at) }) }}
+            </p>
           </div>
         </div>
       </div>
@@ -229,17 +140,15 @@
 import { ref, onMounted } from 'vue'
 import { useI18n } from 'vue-i18n'
 import { useAppStore } from '@/stores/app'
-import subscriptionsAPI from '@/api/subscriptions'
-import type { UserSubscription } from '@/types'
+import subscriptionsAPI, { type SubscriptionDisplay } from '@/api/subscriptions'
 import AppLayout from '@/components/layout/AppLayout.vue'
 import Icon from '@/components/icons/Icon.vue'
-import { useWindowResetStatus } from '@/composables/useWindowResetStatus'
+import { formatDateTime } from '@/utils/format'
 
-const { t } = useI18n()
+const { t, te } = useI18n()
 const appStore = useAppStore()
-const { formatWindowStatus, getResetStatusClass } = useWindowResetStatus('userSubscriptions.resetStatus')
 
-const subscriptions = ref<UserSubscription[]>([])
+const subscriptions = ref<SubscriptionDisplay[]>([])
 const loading = ref(true)
 
 async function loadSubscriptions() {
@@ -254,17 +163,14 @@ async function loadSubscriptions() {
   }
 }
 
-function getProgressWidth(used: number | undefined, limit: number | null | undefined): string {
-  if (!limit || limit === 0) return '0%'
-  const percentage = Math.min(((used || 0) / limit) * 100, 100)
-  return `${percentage}%`
+function statusLabel(status: string): string {
+  const key = `userSubscriptions.status.${status}`
+  return te(key) ? t(key) : status
 }
 
-function getProgressBarClass(used: number | undefined, limit: number | null | undefined): string {
-  if (!limit || limit === 0) return 'bg-dust-400'
-  const percentage = ((used || 0) / limit) * 100
-  if (percentage >= 90) return 'bg-coral-500'
-  if (percentage >= 70) return 'bg-orange-500'
+function getProgressBarClass(pct: number): string {
+  if (pct >= 90) return 'bg-coral-500'
+  if (pct >= 70) return 'bg-orange-500'
   return 'bg-green-500'
 }
 

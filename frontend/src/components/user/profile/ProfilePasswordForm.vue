@@ -101,7 +101,8 @@ const handleChangePassword = async () => {
     form.value = { old_password: '', new_password: '', confirm_password: '' }
     appStore.showSuccess(t('profile.passwordChangeSuccess'))
   } catch (error: any) {
-    appStore.showError(error.response?.data?.detail || t('profile.passwordChangeFailed'))
+    // Surface the backend message verbatim (e.g. wrong original password).
+    appStore.showError(error?.message || t('profile.passwordChangeFailed'))
   } finally {
     loading.value = false
   }

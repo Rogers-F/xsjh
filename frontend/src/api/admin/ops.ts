@@ -510,9 +510,12 @@ export async function getRealtimeTrafficSummary(
 /**
  * Subscribe to realtime QPS updates via WebSocket.
  *
- * Note: browsers cannot set Authorization headers for WebSockets.
- * We authenticate via Sec-WebSocket-Protocol using a prefixed token item:
- *   ["sub2api-admin", "jwt.<token>"]
+ * ORPHANED under new-api: the backend route /api/v1/admin/ops/ws/qps does not
+ * exist (sub2api-only ops console), so this never connects against new-api. The
+ * legacy `jwt.<token>` Sec-WebSocket-Protocol auth has been removed; a same-origin
+ * WS handshake carries the session cookie automatically, but cookie-only is not a
+ * sufficient WS auth pattern (no `New-Api-User` header is possible) — a future
+ * backend WS must use a one-time ticket / dedicated handshake.
  */
 export interface SubscribeQPSOptions {
   token?: string | null
@@ -653,12 +656,15 @@ export function subscribeQPS(onMessage: (data: any) => void, options: SubscribeQ
     const wsBaseUrl = options.wsBaseUrl || import.meta.env.VITE_WS_BASE_URL || window.location.host
     const wsURL = new URL(`${protocol}//${wsBaseUrl}/api/v1/admin/ops/ws/qps`)
 
-    // Do NOT put admin JWT in the URL query string (it can leak via access logs, proxies, etc).
-    // Browsers cannot set Authorization headers for WebSockets, so we pass the token via
-    // Sec-WebSocket-Protocol (subprotocol list): ["sub2api-admin", "jwt.<token>"].
-    const rawToken = String(options.token ?? localStorage.getItem('auth_token') ?? '').trim()
+    // ORPHANED under new-api: there is NO backend route for
+    // /api/v1/admin/ops/ws/qps (sub2api-only ops console), so this will not
+    // connect against a new-api backend. Kept only so removing the legacy
+    // localStorage `auth_token` leaves no dangling read.
+    // A same-origin WebSocket handshake carries the HttpOnly session cookie
+    // automatically, but browsers cannot set the `New-Api-User` header on a WS,
+    // so cookie-only is NOT a sufficient auth pattern — any future backend WS
+    // must use a one-time ticket / dedicated handshake, never trust a bare cookie.
     const protocols: string[] = [OPS_WS_BASE_PROTOCOL]
-    if (rawToken) protocols.push(`jwt.${rawToken}`)
 
     ws = new WebSocket(wsURL.toString(), protocols)
 

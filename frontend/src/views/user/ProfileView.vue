@@ -1,26 +1,14 @@
 <template>
   <AppLayout>
     <div class="mx-auto max-w-4xl space-y-6">
-      <div class="grid grid-cols-1 gap-6 sm:grid-cols-3">
-        <StatCard
-          :title="t('profile.accountBalance')"
-          :value="formatCurrency(user?.balance || 0)"
-          :icon="WalletIcon"
-          icon-variant="success"
-        />
-        <StatCard
-          :title="t('profile.concurrencyLimit')"
-          :value="user?.concurrency || 0"
-          :icon="BoltIcon"
-          icon-variant="warning"
-        />
-        <StatCard
-          :title="t('profile.memberSince')"
-          :value="formatDate(user?.created_at || '', { year: 'numeric', month: 'long' })"
-          :icon="CalendarIcon"
-          icon-variant="primary"
-        />
-      </div>
+      <!-- The backend exposes neither a concurrency limit nor a created_at
+           date; only the quota-derived balance is real. -->
+      <StatCard
+        :title="t('profile.accountBalance')"
+        :value="formatCurrency(quotaToUSD(user?.quota ?? 0))"
+        :icon="WalletIcon"
+        icon-variant="success"
+      />
       <ProfileInfoCard :user="user" />
       <div v-if="contactInfo" class="card border-accent-200 bg-accent-50/50 dark:border-accent-700/50 dark:bg-accent-800/30 p-6">
         <div class="flex items-center gap-4">
@@ -35,7 +23,10 @@
           </div>
         </div>
       </div>
-      <ProfileEditForm :initial-username="user?.username || ''" />
+      <ProfileEditForm
+        :initial-username="user?.username || ''"
+        :initial-display-name="user?.display_name || ''"
+      />
       <ProfilePasswordForm />
       <ProfileTotpCard />
     </div>
@@ -46,7 +37,7 @@
 import { ref, computed, h, onMounted } from 'vue'
 import { useI18n } from 'vue-i18n'
 import { useAuthStore } from '@/stores/auth'
-import { formatDate } from '@/utils/format'
+import { quotaToUSD } from '@/utils/quota'
 import { authAPI } from '@/api'
 import AppLayout from '@/components/layout/AppLayout.vue'
 import StatCard from '@/components/common/StatCard.vue'
@@ -67,24 +58,6 @@ const WalletIcon = {
       'svg',
       { fill: 'none', viewBox: '0 0 24 24', stroke: 'currentColor', 'stroke-width': '1.5' },
       [h('path', { d: 'M21 12a2.25 2.25 0 00-2.25-2.25H15a3 3 0 11-6 0H5.25A2.25 2.25 0 003 12' })]
-    )
-}
-
-const BoltIcon = {
-  render: () =>
-    h(
-      'svg',
-      { fill: 'none', viewBox: '0 0 24 24', stroke: 'currentColor', 'stroke-width': '1.5' },
-      [h('path', { d: 'm3.75 13.5 10.5-11.25L12 10.5h8.25L9.75 21.75 12 13.5H3.75z' })]
-    )
-}
-
-const CalendarIcon = {
-  render: () =>
-    h(
-      'svg',
-      { fill: 'none', viewBox: '0 0 24 24', stroke: 'currentColor', 'stroke-width': '1.5' },
-      [h('path', { d: 'M6.75 3v2.25M17.25 3v2.25' })]
     )
 }
 

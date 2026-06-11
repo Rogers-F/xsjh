@@ -94,7 +94,7 @@
                 {{ displayName }}
               </div>
               <div class="text-xs capitalize text-secondary-fg">
-                {{ user.role }}
+                {{ user.role >= 10 ? 'admin' : 'user' }}
               </div>
             </div>
             <Icon name="chevronDown" size="sm" class="hidden text-dust-400 dark:text-pearl-400 md:block" />
@@ -245,7 +245,7 @@ const docUrl = computed(() => appStore.docUrl)
 
 // 只在标准模式的管理员下显示新手引导按钮
 const showOnboardingButton = computed(() => {
-  return !authStore.isSimpleMode && user.value?.role === 'admin'
+  return !authStore.isSimpleMode && (user.value?.role ?? 0) >= 10
 })
 
 const userInitials = computed(() => {

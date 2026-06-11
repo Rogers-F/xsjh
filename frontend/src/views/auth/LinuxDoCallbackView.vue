@@ -104,17 +104,9 @@ async function handleSubmitInvitation() {
 
   isSubmitting.value = true
   try {
-    const tokenData = await completeLinuxDoOAuthRegistration(
-      pendingOAuthToken.value,
-      invitationCode.value.trim()
-    )
-    if (tokenData.refresh_token) {
-      localStorage.setItem('refresh_token', tokenData.refresh_token)
-    }
-    if (tokenData.expires_in) {
-      localStorage.setItem('token_expires_at', String(Date.now() + tokenData.expires_in * 1000))
-    }
-    await authStore.setToken(tokenData.access_token)
+    await completeLinuxDoOAuthRegistration(pendingOAuthToken.value, invitationCode.value.trim())
+    // Cookie-session: the server established the session; hydrate the user from the cookie.
+    await authStore.hydrateSession()
     appStore.showSuccess(t('auth.loginSuccess'))
     await router.replace(redirectTo.value)
   } catch (e: unknown) {
@@ -130,8 +122,6 @@ onMounted(async () => {
   const params = parseFragmentParams()
 
   const token = params.get('access_token') || ''
-  const refreshToken = params.get('refresh_token') || ''
-  const expiresInStr = params.get('expires_in') || ''
   const redirect = sanitizeRedirectPath(
     params.get('redirect') || route.query.redirect || '/chat'
   )
@@ -166,18 +156,9 @@ onMounted(async () => {
   }
 
   try {
-    // Store refresh token and expires_at (convert to timestamp) if provided
-    if (refreshToken) {
-      localStorage.setItem('refresh_token', refreshToken)
-    }
-    if (expiresInStr) {
-      const expiresIn = parseInt(expiresInStr, 10)
-      if (!isNaN(expiresIn)) {
-        localStorage.setItem('token_expires_at', String(Date.now() + expiresIn * 1000))
-      }
-    }
-
-    await authStore.setToken(token)
+    // Cookie-session: the OAuth callback set the session cookie server-side; there
+    // are no client tokens to store. Hydrate the user from the cookie.
+    await authStore.hydrateSession()
     appStore.showSuccess(t('auth.loginSuccess'))
     await router.replace(redirect)
   } catch (e: unknown) {

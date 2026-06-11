@@ -1,5 +1,4 @@
 /**
- * API Client for Sub2API Backend
  * Central export point for all API modules
  */
 
@@ -13,11 +12,11 @@ export { authAPI, isTotp2FARequired, type LoginResponse } from './auth'
 export { keysAPI } from './keys'
 export { usageAPI } from './usage'
 export { userAPI } from './user'
-export { redeemAPI, type RedeemHistoryItem } from './redeem'
+export { topupAPI } from './topup'
+export { subscriptionsAPI } from './subscriptions'
 export { userGroupsAPI } from './groups'
 export { totpAPI } from './totp'
 export { default as announcementsAPI } from './announcements'
-export { paygAPI } from './payg'
 
 // Admin APIs
 export { adminAPI } from './admin'

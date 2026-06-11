@@ -5,8 +5,7 @@
 
 import { defineStore } from 'pinia'
 import { ref, computed } from 'vue'
-import subscriptionsAPI from '@/api/subscriptions'
-import type { UserSubscription } from '@/types'
+import subscriptionsAPI, { type SubscriptionDisplay } from '@/api/subscriptions'
 
 // Cache TTL: 60 seconds
 const CACHE_TTL_MS = 60_000
@@ -16,13 +15,13 @@ let requestGeneration = 0
 
 export const useSubscriptionStore = defineStore('subscriptions', () => {
   // State
-  const activeSubscriptions = ref<UserSubscription[]>([])
+  const activeSubscriptions = ref<SubscriptionDisplay[]>([])
   const loading = ref(false)
   const loaded = ref(false)
   const lastFetchedAt = ref<number | null>(null)
 
   // In-flight request deduplication
-  let activePromise: Promise<UserSubscription[]> | null = null
+  let activePromise: Promise<SubscriptionDisplay[]> | null = null
 
   // Auto-refresh interval
   let pollerInterval: ReturnType<typeof setInterval> | null = null
@@ -34,7 +33,7 @@ export const useSubscriptionStore = defineStore('subscriptions', () => {
    * Fetch active subscriptions with caching and deduplication
    * @param force - Force refresh even if cache is valid
    */
-  async function fetchActiveSubscriptions(force = false): Promise<UserSubscription[]> {
+  async function fetchActiveSubscriptions(force = false): Promise<SubscriptionDisplay[]> {
     const now = Date.now()
 
     // Return cached data if valid

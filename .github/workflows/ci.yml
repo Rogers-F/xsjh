@@ -1,0 +1,107 @@
+# Minimal CI for the fused xsjh repo: new-api Go backend at the repo root plus the
+# Xingsuan Vue frontend in frontend/. Replaces the pre-fusion sub2api workflows,
+# which pointed at the deleted backend/ tree.
+name: CI
+
+on:
+  push:
+    branches:
+      - main
+  pull_request:
+  workflow_dispatch: {}
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  go:
+    runs-on: ubuntu-latest
+    services:
+      postgres:
+        # postgres:15 = the lowest supported production baseline ("PostgreSQL 15+"),
+        # so the concurrency gate runs against the floor version, not a newer one.
+        image: postgres:15
+        env:
+          POSTGRES_USER: sub2api
+          POSTGRES_PASSWORD: sub2api
+          POSTGRES_DB: xsjh_test
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U sub2api"
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 10
+    env:
+      TEST_POSTGRES_DSN: postgres://sub2api:sub2api@127.0.0.1:5432/xsjh_test?sslmode=disable
+    steps:
+      - uses: actions/checkout@v6
+      - uses: actions/setup-go@v6
+        with:
+          go-version-file: go.mod
+      - name: Build
+        run: go build ./...
+      # The -skip list below is the remaining upstream-pre-existing failures,
+      # A/B-verified to fail identically on the unmodified new-api source tree
+      # (e3193db8). Anchored full names only - do not widen. Lifecycle:
+      #   TestListModelsTokenLimitIncludesTieredBillingModel
+      #     controller: missing fixture (bare run lacks Redis/global state); gets a
+      #     skip-guard in the repair phase, then leaves this list.
+      #   TestStreamScannerHandler_StreamStatus_PreInitialized
+      #     relay/helper: stream-status drift; upstream debt.
+      #   TestObserveChannelAffinityUsageCacheByRelayFormat_{MixedMode,UnsupportedModeKeepsEmpty}
+      #     service: cross-test pollution in full-package runs; upstream debt.
+      # The XFAIL step below re-runs the deterministic subset and goes red the day
+      # they start passing; the informational watchdogs cover the pollution-class rest.
+      - name: Unit tests (PG concurrency gate included)
+        run: >-
+          go test ./...
+          -skip '^(TestListModelsTokenLimitIncludesTieredBillingModel|TestStreamScannerHandler_StreamStatus_PreInitialized|TestObserveChannelAffinityUsageCacheByRelayFormat_MixedMode|TestObserveChannelAffinityUsageCacheByRelayFormat_UnsupportedModeKeepsEmpty)$'
+      - name: PG concurrency gate visibility (B4 - must run, not skip)
+        run: |
+          set -o pipefail
+          go test ./model/ -count=1 -run '^TestPG_' -v | tee pg_gate.log
+          grep -q -- '--- PASS: TestPG_AppendSerializedUnderRowLock' pg_gate.log
+          grep -q -- '--- PASS: TestPG_ConcurrentSameClientID_NoDuplicate' pg_gate.log
+          grep -q -- '--- PASS: TestPG_ReplaceConcurrentOnlyOneWins' pg_gate.log
+      - name: XFAIL - deterministic known-failing must still fail
+        run: |
+          if go test -count=1 ./controller/ -run '^TestListModelsTokenLimitIncludesTieredBillingModel$'; then
+            echo 'known-failing tests now pass - remove them from the -skip list above'
+            exit 1
+          fi
+      - name: Watchdog - relay/helper full package (informational)
+        continue-on-error: true
+        run: go test -count=1 ./relay/helper/
+      - name: Watchdog - service full package (informational)
+        continue-on-error: true
+        run: go test -count=1 ./service/
+
+  frontend:
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: frontend
+    steps:
+      - uses: actions/checkout@v6
+      # pnpm version comes from frontend/package.json "packageManager" (single source).
+      - uses: pnpm/action-setup@v4
+        with:
+          package_json_file: frontend/package.json
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: pnpm
+          cache-dependency-path: frontend/pnpm-lock.yaml
+      - name: Install
+        run: pnpm install --frozen-lockfile
+      - name: Build (vue-tsc -b + vite build, covers typecheck)
+        run: pnpm build
+      - name: Lint
+        run: pnpm lint:check
+      - name: Tests
+        run: pnpm test:run

@@ -782,6 +782,8 @@ export default {
     disable: '禁用',
     nameLabel: '名称',
     namePlaceholder: '我的 API 密钥',
+    nameMaxLengthHint: '最多 50 个字符。',
+    failedToFetchKey: '获取密钥失败',
     groupLabel: '分组',
     selectGroup: '选择分组',
     statusLabel: '状态',
@@ -1038,7 +1040,9 @@ export default {
     codeRedeemSuccess: '兑换成功！',
     failedToRedeem: '兑换失败，请检查兑换码后重试。',
     subscriptionRefreshFailed: '兑换成功，但订阅状态刷新失败。',
-    pleaseEnterCode: '请输入兑换码'
+    pleaseEnterCode: '请输入兑换码',
+    creditRecords: '账户额度记录',
+    creditRecordsEmpty: '账户额度变动记录将显示在这里'
   },
 
   // Profile
@@ -1052,6 +1056,8 @@ export default {
     user: '用户',
     username: '用户名',
     enterUsername: '输入用户名',
+    displayName: '显示名称',
+    enterDisplayName: '请输入显示名称',
     editProfile: '编辑个人资料',
     updateProfile: '更新资料',
     updating: '更新中...',
@@ -1060,6 +1066,7 @@ export default {
     usernameRequired: '用户名不能为空',
     changePassword: '修改密码',
     currentPassword: '当前密码',
+    currentPasswordRequired: '保存资料修改需要输入当前密码',
     newPassword: '新密码',
     confirmNewPassword: '确认新密码',
     passwordHint: '密码至少需要 8 个字符',
@@ -4193,7 +4200,15 @@ export default {
     notEnabledTitle: '该功能未开启',
     notEnabledDesc: '管理员暂未开启充值/订阅入口，请联系管理员。',
     notConfiguredTitle: '充值/订阅链接未配置',
-    notConfiguredDesc: '管理员已开启入口，但尚未配置充值/订阅链接，请联系管理员。'
+    notConfiguredDesc: '管理员已开启入口，但尚未配置充值/订阅链接，请联系管理员。',
+    duration: '时长',
+    quota: '额度',
+    purchaseLimit: '每人限购次数',
+    balancePay: '余额支付',
+    balancePayUnavailable: '不支持余额支付',
+    confirmTitle: '确认购买',
+    confirmMessage: '将从余额支付 {price} 购买「{plan}」，确认继续？',
+    paySuccess: '购买成功'
   },
 
   wallet: {
@@ -4242,7 +4257,12 @@ export default {
     createOrderFailed: '创建支付订单失败',
     paymentSuccess: '支付成功，钱包余额已更新',
     syncOrderFailed: '同步订单失败',
-    paymentCodeCopied: '支付链接已复制'
+    paymentCodeCopied: '支付链接已复制',
+    customAmountUsd: '请输入充值额度（美元）',
+    minTopupHint: '最低充值额度：{min}',
+    payableAmount: '应付金额',
+    onlineTopupDisabled: '在线充值暂未开放，请联系管理员。',
+    completedAt: '完成时间'
   },
 
   // Custom Page (iframe embed)
@@ -4289,7 +4309,8 @@ export default {
     status: {
       active: '有效',
       expired: '已过期',
-      revoked: '已撤销'
+      revoked: '已撤销',
+      cancelled: '已取消'
     },
     usage: '用量',
     expires: '到期时间',
@@ -4302,6 +4323,7 @@ export default {
     daysRemaining: '剩余 {days} 天',
     expiresOn: '{date} 到期',
     resetIn: '{time} 后重置',
+    resetsAt: '将于 {time} 重置',
     windowNotActive: '等待首次使用',
     usageOf: '已用 {used} / {limit}'
   },

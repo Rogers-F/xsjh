@@ -2,7 +2,7 @@
   <AppLayout>
     <TablePageLayout>
       <template #actions>
-        <div class="grid grid-cols-2 gap-4 lg:grid-cols-4">
+        <div class="grid grid-cols-2 gap-4 lg:grid-cols-3">
           <!-- Total Requests -->
           <div class="card p-4">
           <div class="flex items-center gap-3">
@@ -36,9 +36,9 @@
               <p class="text-xl font-bold text-primary-fg">
                 {{ formatTokens(usageStats?.total_tokens || 0) }}
               </p>
+              <!-- The aggregate source has no input/output token split — totals only. -->
               <p class="text-xs text-secondary-fg">
-                {{ t('usage.in') }}: {{ formatTokens(usageStats?.total_input_tokens || 0) }} /
-                {{ t('usage.out') }}: {{ formatTokens(usageStats?.total_output_tokens || 0) }}
+                {{ t('usage.inSelectedRange') }}
               </p>
             </div>
           </div>
@@ -54,32 +54,14 @@
               <p class="text-xs font-medium text-secondary-fg">
                 {{ t('usage.totalCost') }}
               </p>
+              <!-- Single cost: the backend bills one quota cost per log (no
+                   standard-vs-actual split). -->
               <p class="text-xl font-bold num-mono text-green-600 dark:text-green-400">
-                ${{ (usageStats?.total_actual_cost || 0).toFixed(4) }}
+                ${{ (usageStats?.total_cost || 0).toFixed(4) }}
               </p>
               <p class="text-xs text-secondary-fg">
-                {{ t('usage.actualCost') }} /
-                <span class="line-through">${{ (usageStats?.total_cost || 0).toFixed(4) }}</span>
-                {{ t('usage.standardCost') }}
+                {{ t('usage.inSelectedRange') }}
               </p>
-            </div>
-          </div>
-        </div>
-
-        <!-- Average Duration -->
-        <div class="card p-4">
-          <div class="flex items-center gap-3">
-            <div class="rounded-lg bg-purple-100 p-2 dark:bg-purple-900/30">
-              <Icon name="clock" size="md" class="text-purple-600 dark:text-purple-400" />
-            </div>
-            <div>
-              <p class="text-xs font-medium text-secondary-fg">
-                {{ t('usage.avgDuration') }}
-              </p>
-              <p class="text-xl font-bold text-primary-fg">
-                {{ formatDuration(usageStats?.average_duration_ms || 0) }}
-              </p>
-              <p class="text-xs text-secondary-fg">{{ t('usage.perRequest') }}</p>
             </div>
           </div>
         </div>
@@ -94,7 +76,7 @@
             <div class="min-w-[180px]">
               <label class="input-label">{{ t('usage.apiKeyFilter') }}</label>
               <Select
-                v-model="filters.api_key_id"
+                v-model="filters.token_name"
                 :options="apiKeyOptions"
                 :placeholder="t('usage.allApiKeys')"
                 @change="applyFilters"
@@ -286,16 +268,6 @@
             </div>
           </template>
 
-          <template #cell-first_token="{ row }">
-            <span
-              v-if="row.first_token_ms != null"
-              class="text-sm text-dust-600 dark:text-pearl-300"
-            >
-              {{ formatDuration(row.first_token_ms) }}
-            </span>
-            <span v-else class="text-sm text-dust-400 dark:text-pearl-400">-</span>
-          </template>
-
           <template #cell-duration="{ row }">
             <span class="text-sm text-dust-600 dark:text-pearl-300">{{
               formatDuration(row.duration_ms)
@@ -485,6 +457,7 @@ import { ref, computed, reactive, onMounted } from 'vue'
 import { useI18n } from 'vue-i18n'
 import { useAppStore } from '@/stores/app'
 import { usageAPI, keysAPI } from '@/api'
+import type { UsageLogFilters } from '@/api/usage'
 import AppLayout from '@/components/layout/AppLayout.vue'
 import TablePageLayout from '@/components/layout/TablePageLayout.vue'
 import DataTable from '@/components/common/DataTable.vue'
@@ -493,9 +466,9 @@ import EmptyState from '@/components/common/EmptyState.vue'
 import Select from '@/components/common/Select.vue'
 import DateRangePicker from '@/components/common/DateRangePicker.vue'
 import Icon from '@/components/icons/Icon.vue'
-import type { UsageLog, ApiKey, UsageQueryParams, UsageStatsResponse } from '@/types'
+import type { UsageLog, ApiKey, UsageStatsResponse } from '@/types'
 import type { Column } from '@/components/common/types'
-import { formatDateTime, formatReasoningEffort } from '@/utils/format'
+import { formatDateTime, formatReasoningEffort, toLocalDayKey } from '@/utils/format'
 import { getPersistedPageSize } from '@/composables/usePersistedPageSize'
 import { formatTokenPricePerMillion } from '@/utils/usagePricing'
 import { getUsageServiceTierLabel } from '@/utils/usageServiceTier'
@@ -527,7 +500,7 @@ const columns = computed<Column[]>(() => [
   { key: 'stream', label: t('usage.type'), sortable: false },
   { key: 'tokens', label: t('usage.tokens'), sortable: false },
   { key: 'cost', label: t('usage.cost'), sortable: false },
-  { key: 'first_token', label: t('usage.firstToken'), sortable: false },
+  // No first-token column: the backend has no such metric (adapter zeroes it).
   { key: 'duration', label: t('usage.duration'), sortable: false },
   { key: 'created_at', label: t('usage.time'), sortable: true },
   { key: 'user_agent', label: t('usage.userAgent'), sortable: false }
@@ -538,20 +511,16 @@ const apiKeys = ref<ApiKey[]>([])
 const loading = ref(false)
 const exporting = ref(false)
 
+// The backend filters logs by token NAME, not id — option values are key names.
 const apiKeyOptions = computed(() => {
   return [
     { value: null, label: t('usage.allApiKeys') },
     ...apiKeys.value.map((key) => ({
-      value: key.id,
+      value: key.name,
       label: key.name
     }))
   ]
 })
-
-// Helper function to format date in local timezone
-const formatLocalDate = (date: Date): string => {
-  return `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, '0')}-${String(date.getDate()).padStart(2, '0')}`
-}
 
 // Initialize date range immediately
 const now = new Date()
@@ -559,11 +528,11 @@ const weekAgo = new Date(now)
 weekAgo.setDate(weekAgo.getDate() - 6)
 
 // Date range state
-const startDate = ref(formatLocalDate(weekAgo))
-const endDate = ref(formatLocalDate(now))
+const startDate = ref(toLocalDayKey(weekAgo))
+const endDate = ref(toLocalDayKey(now))
 
-const filters = ref<UsageQueryParams>({
-  api_key_id: undefined,
+const filters = ref<UsageLogFilters>({
+  token_name: undefined,
   start_date: undefined,
   end_date: undefined
 })
@@ -658,7 +627,7 @@ const loadUsageLogs = async () => {
   const { signal } = currentAbortController
   loading.value = true
   try {
-    const params: UsageQueryParams = {
+    const params: UsageLogFilters = {
       page: pagination.page,
       page_size: pagination.page_size,
       ...filters.value
@@ -698,11 +667,11 @@ const loadApiKeys = async () => {
 
 const loadUsageStats = async () => {
   try {
-    const apiKeyId = filters.value.api_key_id ? Number(filters.value.api_key_id) : undefined
+    // Range stats come from the per-day aggregate source, which cannot be
+    // filtered by key — the cards always cover all keys in the range.
     const stats = await usageAPI.getStatsByDateRange(
       filters.value.start_date || startDate.value,
-      filters.value.end_date || endDate.value,
-      apiKeyId
+      filters.value.end_date || endDate.value
     )
     usageStats.value = stats
   } catch (error) {
@@ -718,7 +687,7 @@ const applyFilters = () => {
 
 const resetFilters = () => {
   filters.value = {
-    api_key_id: undefined,
+    token_name: undefined,
     start_date: undefined,
     end_date: undefined
   }
@@ -726,8 +695,8 @@ const resetFilters = () => {
   const now = new Date()
   const weekAgo = new Date(now)
   weekAgo.setDate(weekAgo.getDate() - 6)
-  startDate.value = formatLocalDate(weekAgo)
-  endDate.value = formatLocalDate(now)
+  startDate.value = toLocalDayKey(weekAgo)
+  endDate.value = toLocalDayKey(now)
   filters.value.start_date = startDate.value
   filters.value.end_date = endDate.value
   pagination.page = 1
@@ -783,7 +752,7 @@ const exportToCSV = async () => {
     const totalRequests = Math.ceil(pagination.total / pageSize)
 
     for (let page = 1; page <= totalRequests; page++) {
-      const params: UsageQueryParams = {
+      const params: UsageLogFilters = {
         page: page,
         page_size: pageSize,
         ...filters.value
@@ -811,7 +780,6 @@ const exportToCSV = async () => {
       'Rate Multiplier',
       'Billed Cost',
       'Original Cost',
-      'First Token (ms)',
       'Duration (ms)'
     ]
     const rows = allLogs.map((log) =>
@@ -829,7 +797,6 @@ const exportToCSV = async () => {
         log.rate_multiplier,
         log.actual_cost.toFixed(8),
         log.total_cost.toFixed(8),
-        log.first_token_ms ?? '',
         log.duration_ms
       ].map(escapeCSVValue)
     )

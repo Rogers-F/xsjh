@@ -486,7 +486,10 @@ const ChevronDoubleRightIcon = {
 const userNavItems = computed((): NavItem[] => {
   const items: NavItem[] = [
     { path: '/dashboard', label: t('nav.dashboard'), icon: DashboardIcon },
-    { path: '/playground', label: t('nav.playground'), icon: PlaygroundIcon },
+    // Playground is retired while chat runs through the new-api BFF.
+    ...(appStore.newApiBffEnabled
+      ? []
+      : [{ path: '/playground', label: t('nav.playground'), icon: PlaygroundIcon }]),
     { path: '/keys', label: t('nav.apiKeys'), icon: KeyIcon },
     { path: '/usage', label: t('nav.usage'), icon: ChartIcon, hideInSimpleMode: true },
     ...(appStore.cachedPublicSettings?.payg_enabled
@@ -518,7 +521,10 @@ const userNavItems = computed((): NavItem[] => {
 // Personal navigation items (for admin's "My Account" section, without Dashboard)
 const personalNavItems = computed((): NavItem[] => {
   const items: NavItem[] = [
-    { path: '/playground', label: t('nav.playground'), icon: PlaygroundIcon },
+    // Playground is retired while chat runs through the new-api BFF.
+    ...(appStore.newApiBffEnabled
+      ? []
+      : [{ path: '/playground', label: t('nav.playground'), icon: PlaygroundIcon }]),
     { path: '/keys', label: t('nav.apiKeys'), icon: KeyIcon },
     { path: '/usage', label: t('nav.usage'), icon: ChartIcon, hideInSimpleMode: true },
     ...(appStore.cachedPublicSettings?.payg_enabled

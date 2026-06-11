@@ -52,6 +52,8 @@ const { t } = useI18n()
 const props = defineProps<{
   trendData: TrendDataPoint[]
   loading?: boolean
+  /** Chart total tokens only (for sources without an input/output/cache split). */
+  totalOnly?: boolean
 }>()
 
 const isDarkMode = computed(() => {
@@ -69,6 +71,22 @@ const chartColors = computed(() => ({
 
 const chartData = computed(() => {
   if (!props.trendData?.length) return null
+
+  if (props.totalOnly) {
+    return {
+      labels: props.trendData.map((d) => d.date),
+      datasets: [
+        {
+          label: 'Total',
+          data: props.trendData.map((d) => d.total_tokens),
+          borderColor: chartColors.value.input,
+          backgroundColor: `${chartColors.value.input}20`,
+          fill: true,
+          tension: 0.3
+        }
+      ]
+    }
+  }
 
   return {
     labels: props.trendData.map((d) => d.date),
@@ -138,6 +156,10 @@ const lineOptions = computed(() => ({
           const dataIndex = tooltipItems[0]?.dataIndex
           if (dataIndex !== undefined && props.trendData[dataIndex]) {
             const data = props.trendData[dataIndex]
+            if (props.totalOnly) {
+              // Single billed cost — no standard-vs-actual split in this source.
+              return `Requests: ${data.requests.toLocaleString()} | Cost: $${formatCost(data.cost)}`
+            }
             return `Actual: $${formatCost(data.actual_cost)} | Standard: $${formatCost(data.cost)}`
           }
           return ''

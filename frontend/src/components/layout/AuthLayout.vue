@@ -66,6 +66,7 @@
 import { computed, onMounted } from 'vue'
 import { useAppStore } from '@/stores'
 import { sanitizeUrl } from '@/utils/url'
+import { DEFAULT_SITE_NAME } from '@/constants/branding'
 
 const appStore = useAppStore()
 
@@ -76,7 +77,7 @@ onMounted(() => {
 // Use cached settings from appStore (initialized from SSR-injected window.__APP_CONFIG__)
 // This eliminates the flash of default content on login/register pages
 const siteName = computed(
-  () => appStore.cachedPublicSettings?.site_name || appStore.siteName || 'Sub2API'
+  () => appStore.cachedPublicSettings?.site_name || appStore.siteName || DEFAULT_SITE_NAME
 )
 const siteLogo = computed(() =>
   sanitizeUrl(appStore.cachedPublicSettings?.site_logo || appStore.siteLogo || '', {

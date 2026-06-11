@@ -96,7 +96,7 @@ describe('AccountTestModal', () => {
     copyToClipboard.mockReset()
     Object.defineProperty(globalThis, 'localStorage', {
       value: {
-        getItem: vi.fn((key: string) => (key === 'auth_token' ? 'test-token' : null)),
+        getItem: vi.fn((key: string) => (key === 'new_api_user_id' ? '42' : null)),
         setItem: vi.fn(),
         removeItem: vi.fn(),
         clear: vi.fn()
@@ -139,6 +139,10 @@ describe('AccountTestModal', () => {
       model_id: 'gemini-3.1-flash-image',
       prompt: 'draw a tiny orange cat astronaut'
     })
+    // Cookie-session transport: credentials + New-Api-User, no legacy Bearer token.
+    expect(request.credentials).toBe('include')
+    expect(request.headers['New-Api-User']).toBe('42')
+    expect(request.headers.Authorization).toBeUndefined()
 
     const preview = wrapper.find('img[alt="gemini-test-image-1"]')
     expect(preview.exists()).toBe(true)
